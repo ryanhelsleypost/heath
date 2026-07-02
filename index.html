@@ -55,6 +55,39 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .tab-btn:hover:not(.active){color:var(--text-mid);}
 /* Main wrapper */
 .main-wrap{max-width:780px;margin:0 auto;padding:16px 16px 80px;}
+#timeline-strip-wrap{width:calc(100% + 40px);margin:10px -20px -12px;background:var(--bg);border-top:1px solid var(--border);padding-bottom:1px;}
+.add-grid{display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:end;}
+.add-grid.bill{grid-template-columns:1fr 110px 70px auto;}
+
+/* ═══ MOBILE (phones) ═══ */
+@media (max-width:640px){
+  /* prevent iOS auto-zoom when focusing inputs */
+  input,select,textarea{font-size:16px !important;}
+  .hdr{padding:10px 12px;}
+  #timeline-strip-wrap{width:calc(100% + 24px);margin:8px -12px -10px;}
+  .app-title{font-size:11px;letter-spacing:.08em;}
+  .bal-display,.bal-input{font-size:26px;}
+  .bal-input{width:140px;}
+  .bal-side{margin-left:8px;padding-left:10px;gap:3px;}
+  .bal-side .stat-val{font-size:13px;}
+  .hdr-stats{gap:12px;margin-top:8px;}
+  .stat-val{font-size:14px;}
+  .stat-lbl{font-size:10px;}
+  .hdr-actions{width:100%;padding-top:8px;gap:6px;}
+  .hdr-actions .btn{flex:1;text-align:center;padding:9px 4px;}
+  .main-wrap{padding:12px 8px 80px;}
+  .tab-bar{width:100%;}
+  .tab-btn{flex:1;padding:10px 8px;}
+  .period-hdr{padding:11px 10px;}
+  .bill-row{padding:9px 8px;gap:7px;}
+  .status-btn{width:30px;height:30px;font-size:14px;}
+  .btn.sm{padding:6px 10px;}
+  .add-grid,.add-grid.bill{grid-template-columns:1fr 1fr;}
+  .add-grid > div:first-child{grid-column:1/-1;}
+  .modal-backdrop{padding:14px 8px;}
+  .modal{padding:16px;border-radius:10px;}
+  .dc-card-hdr{padding:12px 10px;}
+}
 /* Periods */
 .period{margin-bottom:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
 .period.active{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim);}
@@ -166,7 +199,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
       <button class="btn primary" onclick="exportData()">↓ Export</button>
     </div>
   </div>
-  <div id="timeline-strip-wrap" style="width:calc(100% + 40px);margin:10px -20px -12px;background:var(--bg);border-top:1px solid var(--border);padding-bottom:1px;"></div>
+  <div id="timeline-strip-wrap"></div>
 </div>
 
 <div class="main-wrap">
@@ -765,7 +798,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
     '</div>';
   } else {
     html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
-      '<div style="display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:end;">'+
+      '<div class="add-grid inc">'+
         '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">SOURCE</div>'+
           '<input class="add-input" id="ai-name-'+p.id+'" placeholder="e.g. Amanda Paycheck" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddIncome(\''+p.id+'\')"></div>'+
         '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
@@ -824,7 +857,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
     '</div>';
   } else {
     html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
-      '<div style="display:grid;grid-template-columns:1fr 110px 70px auto;gap:8px;align-items:end;">'+
+      '<div class="add-grid bill">'+
         '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">NAME</div>'+
           '<input class="add-input" id="ab-name-'+p.id+'" placeholder="e.g. Electric" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddBill(\''+p.id+'\')"></div>'+
         '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
