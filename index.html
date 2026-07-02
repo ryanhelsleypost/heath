@@ -1690,12 +1690,12 @@ function openSyncModal(){
       '<div class="modal"><h2>☁ Cloud Sync</h2>'+
       '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6;">Paste your Firebase config below and pick a sync code. Use the <b style="color:var(--text-mid);">same sync code on every device</b> — the code is the key to your data, so keep it long and private. Anyone who has it can see and edit your ledger.</div>'+
       '<span class="m-lbl">Firebase config (paste the whole snippet from the Firebase console)</span>'+
-      '<textarea class="m-input" id="sy-cfg" rows="6" placeholder="const firebaseConfig = { apiKey: \'...\', databaseURL: \'...\', ... };" style="font-family:var(--mono);font-size:12px;resize:vertical;">'+esc(cfgTxt)+'</textarea>'+
+      '<textarea class="m-input" id="sy-cfg" rows="6" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="const firebaseConfig = { apiKey: \'...\', databaseURL: \'...\', ... };" style="font-family:var(--mono);font-size:12px;resize:vertical;">'+esc(cfgTxt)+'</textarea>'+
       '<span class="m-lbl">Database URL (only if not included in the config above)</span>'+
-      '<input class="m-input" id="sy-dburl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com" value="">'+
+      '<input class="m-input" id="sy-dburl" type="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://your-project-default-rtdb.firebaseio.com" value="">'+
       '<span class="m-lbl">Sync code (same on all devices)</span>'+
       '<div style="display:flex;gap:6px;">'+
-        '<input class="m-input" id="sy-code" style="flex:1;" placeholder="long-random-code" value="'+esc(SYNC.code||'')+'">'+
+        '<input class="m-input" id="sy-code" style="flex:1;" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="long-random-code" value="'+esc(SYNC.code||'')+'">'+
         '<button class="btn sm" style="align-self:flex-start;margin-top:1px;" onclick="syncGenCode()">🎲 Generate</button>'+
       '</div>'+
       '<div style="font-size:12px;color:var(--text-dim);margin:8px 0 4px;">Status: <span style="color:'+(SYNC.status==='synced'?'var(--green)':SYNC.status==='error'?'var(--red)':'var(--text-mid)')+';">'+(SYNC.status==='off'?'not configured':SYNC.status)+'</span></div>'+
@@ -1712,10 +1712,15 @@ function syncSaveAndConnect(){
   var cfg=parseFbConfig(txt);
   var dbUrl=(document.getElementById('sy-dburl')?.value||'').trim();
   if(dbUrl)cfg.databaseURL=dbUrl;
-  var code=(document.getElementById('sy-code')?.value||'').trim();
+  var code=(document.getElementById('sy-code')?.value||'').trim().toLowerCase(); // case-insensitive: phones auto-capitalize
   if(!cfg.apiKey){alert('Couldn\'t find an apiKey in the pasted config. Paste the full firebaseConfig snippet from the Firebase console.');return;}
   if(!cfg.databaseURL){alert('No databaseURL found. Either create the Realtime Database first (then re-copy the config), or paste the database URL into its field.');return;}
   if(!code||code.length<8){alert('Sync code must be at least 8 characters — use 🎲 Generate for a strong one.');return;}
+  if(code!==SYNC.code){
+    // Connecting to a (new or different) code: defer to whatever the cloud already has.
+    SYNC.localStamp=0;
+    localStorage.setItem('heath_sync_stamp','0');
+  }
   SYNC.cfg=cfg;SYNC.code=code;
   localStorage.setItem('heath_sync',JSON.stringify({cfg:SYNC.cfg,code:SYNC.code}));
   closeModal();
