@@ -1,0 +1,1743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heath</title>
+<meta name="theme-color" content="#0e0f0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Heath">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0e0f0e; --surface:#161817; --surface2:#1e201e;
+  --border:#2a2d2a; --border2:#333633;
+  --green:#4ade80; --green-dim:#22543d;
+  --red:#f87171; --red-dim:#7f1d1d;
+  --amber:#fbbf24; --amber-dim:#78350f;
+  --blue:#60a5fa; --blue-dim:#1e3a5f;
+  --text:#f5f7f5; --text-mid:#bcc4bc; --text-dim:#7f8c7f;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15px;line-height:1.5;}
+/* Header */
+.hdr{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 20px;}
+.hdr-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.app-title{font-size:12px;color:var(--text-dim);letter-spacing:.15em;text-transform:uppercase;}
+.bal-wrap{display:flex;align-items:center;gap:8px;margin-top:2px;}
+.bal-side{display:flex;flex-direction:column;gap:5px;margin-left:12px;padding-left:14px;border-left:1px solid var(--border2);}
+.bal-side .stat-val{font-size:14px;}
+.bal-lbl{font-size:12px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;}
+.bal-display{font-size:32px;font-weight:600;color:var(--green);cursor:pointer;border-bottom:1px dashed var(--green-dim);}
+.bal-input{font-family:var(--mono);font-size:32px;font-weight:600;color:var(--green);background:transparent;border:none;border-bottom:1px solid var(--green);outline:none;width:180px;}
+.hdr-stats{display:flex;gap:20px;margin-top:6px;flex-wrap:wrap;}
+.stat{display:flex;flex-direction:column;gap:1px;}
+.stat-lbl{font-size:11px;color:var(--text-dim);letter-spacing:.12em;text-transform:uppercase;}
+.stat-val{font-size:15px;font-weight:600;}
+.stat-val.pos{color:var(--green);} .stat-val.neg{color:var(--red);} .stat-val.amber{color:var(--amber);} .stat-val.neu{color:var(--text-mid);}
+.hdr-actions{display:flex;gap:8px;align-items:center;padding-top:4px;}
+/* Buttons */
+.btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.06em;padding:5px 11px;border-radius:4px;border:1px solid var(--border2);background:var(--surface2);color:var(--text-mid);cursor:pointer;transition:all .15s;}
+.btn:hover{border-color:var(--text-dim);color:var(--text);}
+.btn.primary{border-color:var(--green-dim);color:var(--green);background:#0d2218;}
+.btn.primary:hover{background:#0f2d1d;border-color:var(--green);}
+.btn.danger{border-color:var(--red-dim);color:var(--red);background:#1f0a0a;}
+.btn.danger:hover{background:#2a0d0d;}
+.btn.sm{padding:3px 8px;font-size:12px;}
+/* Tabs */
+.tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+.tab-btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;padding:8px 14px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);cursor:pointer;transition:all .15s;}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green);}
+.tab-btn:hover:not(.active){color:var(--text-mid);}
+/* Main wrapper */
+.main-wrap{max-width:780px;margin:0 auto;padding:16px 16px 80px;}
+/* Periods */
+.period{margin-bottom:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.period.active{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim);}
+.period.future{opacity:.78;}
+.period.past{opacity:.12;filter:saturate(0);pointer-events:none;transition:opacity .2s,filter .2s;}
+.period.past:hover{opacity:.35;filter:saturate(.3);pointer-events:auto;}
+.period.past .period-hdr{cursor:default;}
+.period-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);cursor:pointer;user-select:none;}
+.period.active .period-hdr{background:#0d2218;}
+.period-badge{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);}
+.period-dates{font-size:13px;font-weight:600;color:var(--text-mid);flex:1;}
+.period.active .period-dates{color:var(--green);}
+.period-income{font-size:14px;font-weight:600;color:var(--green);}
+.period-end{font-size:14px;font-weight:600;margin-left:4px;}
+.period-end.pos{color:var(--green);} .period-end.neg{color:var(--red);} .period-end.tight{color:var(--amber);}
+.period-toggle{font-size:12px;color:var(--text-dim);transition:transform .2s;}
+.period.open .period-toggle{transform:rotate(180deg);}
+.period-body{display:none;}
+.period.open .period-body{display:block;}
+/* Bill rows */
+.bill-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--border);transition:background .12s;}
+.bill-row:hover{background:var(--surface2);}
+.bill-row.cleared{opacity:.32;}
+.bill-row.vacation{border-left:2px solid #22c55e;}
+.bill-row.seasonal{border-left:2px solid var(--blue);}
+.bill-row.sec-hdr{background:var(--surface);cursor:default;}
+.bill-row.sec-hdr:hover{background:var(--surface);}
+.status-btn{width:22px;height:22px;border-radius:3px;border:1px solid var(--border2);background:transparent;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);color:var(--text-dim);transition:all .12s;}
+.status-btn.pending{border-color:var(--amber);background:var(--amber-dim);color:var(--amber);}
+.status-btn.cleared{border-color:var(--green-dim);background:var(--green-dim);color:var(--green);}
+.bill-day{font-size:12px;color:var(--text-dim);width:24px;flex-shrink:0;text-align:right;}
+.bill-name{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bill-name.struck{color:var(--text-dim);text-decoration:line-through;}
+.bill-name a.bill-link{color:var(--blue);text-decoration:none;border-bottom:1px dashed var(--blue-dim);}
+.bill-name a.bill-link:hover{border-bottom-color:var(--blue);}
+.bill-name.struck a.bill-link{color:var(--text-dim);text-decoration:line-through;border-bottom:none;}
+.bill-amt{font-size:14px;font-weight:500;min-width:68px;text-align:right;}
+.bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
+.bill-acts{display:flex;gap:4px;opacity:0;transition:opacity .12s;}
+.bill-row:hover .bill-acts{opacity:1;}
+.act-btn{font-family:var(--mono);font-size:11px;padding:2px 5px;border:1px solid var(--border2);border-radius:3px;background:transparent;color:var(--text-dim);cursor:pointer;}
+.act-btn:hover{border-color:var(--text-mid);color:var(--text);}
+.act-btn.del:hover{border-color:var(--red-dim);color:var(--red);}
+.sec-lbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);font-weight:600;}
+.add-input{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:4px 8px;outline:none;flex:1;}
+.add-input:focus{border-color:var(--text-dim);}
+.add-input::placeholder{color:var(--text-dim);}
+.period-footer{display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border);background:var(--surface);}
+/* Debt Collector */
+.dc-stat-row{display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface);border-radius:6px;border:1px solid var(--border);}
+.dc-avalanche{font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:5px;border:1px solid var(--border);}
+.dc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+.dc-card.maxed{border-color:var(--red-dim);}
+.dc-card.high{border-color:var(--amber-dim);}
+.dc-card-hdr{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none;}
+.dc-card-hdr:hover{background:var(--surface2);}
+.dc-card-name{font-size:15px;font-weight:600;flex:1;}
+.dc-int{font-size:13px;color:var(--amber);white-space:nowrap;}
+.dc-util{font-size:12px;padding:2px 7px;border-radius:3px;font-weight:700;}
+.dc-util.maxed{background:var(--red-dim);color:var(--red);}
+.dc-util.high{background:var(--amber-dim);color:var(--amber);}
+.dc-util.ok{background:var(--green-dim);color:var(--green);}
+.dc-bal{font-size:16px;font-weight:600;color:var(--red);}
+.dc-bar-wrap{height:4px;background:var(--border2);border-radius:0;}
+.dc-bar-fill{height:100%;transition:width .3s;}
+.dc-body{display:none;border-top:1px solid var(--border);padding:14px 16px;}
+.dc-card.open .dc-body{display:block;}
+.dc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.dc-field{display:flex;flex-direction:column;gap:3px;}
+.dc-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);}
+.dc-val{font-size:15px;font-weight:500;}
+.dc-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:5px 8px;outline:none;width:100%;}
+.dc-input:focus{border-color:var(--text-mid);}
+.dc-proj{background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:10px 12px;margin-bottom:12px;font-size:14px;}
+.dc-actions{display:flex;gap:8px;flex-wrap:wrap;}
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:8px;width:100%;max-width:480px;padding:22px;}
+.modal.sm{max-width:360px;}
+.modal h2{font-size:15px;font-weight:600;margin-bottom:18px;letter-spacing:.04em;}
+.m-lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;}
+.m-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:7px 10px;outline:none;width:100%;margin-bottom:10px;}
+.m-input:focus{border-color:var(--text-mid);}
+.m-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.m-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
+.trow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
+.trow:last-child{border-bottom:none;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-top">
+    <div>
+      <div class="app-title">Heath — Helsley Family <span id="sync-dot" title="Sync off — click ☁ Sync to set up" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim);margin-left:6px;vertical-align:middle;cursor:pointer;" onclick="openSyncModal()"></span></div>
+      <div class="bal-wrap">
+        <div class="bal-lbl">Balance</div>
+        <div id="bal-display" class="bal-display" onclick="editBal()">$5,377</div>
+        <input id="bal-input" class="bal-input" type="text" style="display:none"
+          onblur="saveBal()" onkeydown="if(event.key==='Enter')saveBal()">
+        <div id="bal-side" class="bal-side"></div>
+      </div>
+    </div>
+    <div id="hdr-stats" class="hdr-stats"></div>
+    <div class="hdr-actions">
+      <button class="btn" onclick="openSyncModal()">☁ Sync</button>
+      <button class="btn" onclick="openManage()">⚙ Bills</button>
+      <button class="btn" onclick="importData()">↑ Import</button>
+      <button class="btn primary" onclick="exportData()">↓ Export</button>
+    </div>
+  </div>
+  <div id="timeline-strip-wrap" style="width:calc(100% + 40px);margin:10px -20px -12px;background:var(--bg);border-top:1px solid var(--border);padding-bottom:1px;"></div>
+</div>
+
+<div class="main-wrap">
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-periods" onclick="setTab('periods')">Pay Periods</button>
+    <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
+  </div>
+  <div id="tab-periods"></div>
+  <div id="tab-debt" style="display:none"></div>
+</div>
+<div id="modal-root"></div>
+
+<script>
+const STORAGE_KEY = 'ledger_v2';
+const DC_KEY = 'ledger_dc_v1';
+
+// ═══ TEMPLATES ═══
+const DEFAULT_TEMPLATES = [
+  {id:'rent',    name:'Rent',           day:1,  amount:2425, category:'fixed'},
+  {id:'storage', name:'Storage',        day:1,  amount:470,  category:'fixed'},
+  {id:'boat',    name:'Boat Insurance', day:3,  amount:30,   category:'fixed'},
+  {id:'water',   name:'Water Bill',     day:3,  amount:175,  category:'fixed'},
+  {id:'socal',   name:'SoCal Gas',      day:3,  amount:75,   category:'fixed'},
+  {id:'cap1',    name:'Cap 1 Savor',    day:4,  amount:100,  category:'fixed'},
+  {id:'chase',   name:'Chase CC',       day:4,  amount:200,  category:'fixed'},
+  {id:'tslains', name:'Tesla Insurance',day:8,  amount:205,  category:'fixed'},
+  {id:'magkey',  name:'Magic Key',      day:9,  amount:475,  category:'fixed'},
+  {id:'cap1sil', name:'Cap 1 Silver',   day:13, amount:192,  category:'fixed'},
+  {id:'disc',    name:'Discover',       day:14, amount:200,  category:'fixed'},
+  {id:'inet',    name:'Internet',       day:15, amount:89,   category:'fixed'},
+  {id:'runner',  name:'4Runner',        day:15, amount:1031, category:'fixed'},
+  {id:'autoinsc',name:'Auto Insurance', day:22, amount:635,  category:'fixed'},
+  {id:'cell',    name:'Cell',           day:23, amount:245,  category:'fixed'},
+  {id:'elec',    name:'Electric',       day:25, amount:350,  category:'fixed'},
+  {id:'tesla',   name:'Tesla',          day:26, amount:950,  category:'fixed'},
+  {id:'apple',   name:'Apple Storage',  day:30, amount:40,   category:'fixed'},
+  {id:'groc',    name:'Groceries',      day:null,amount:300, category:'variable'},
+  {id:'gas',     name:'Gas',            day:null,amount:120, category:'variable'},
+];
+
+// Additional income per period
+const ADDL_INCOME_MAP = {
+  '2026-06-19':[{name:"Emma's Fees", amount:300}],
+  '2026-07-31':[{name:"Emma's Fees", amount:300}, {name:"Amanda's Paycheck", amount:1000}],
+  '2026-08-28':[{name:"Emma's Fees", amount:300}, {name:"Amanda's Paycheck", amount:1000}],
+  '2026-09-25':[{name:"Emma's Fees", amount:300}],
+  '2026-10-23':[{name:"Emma's Fees", amount:300}],
+  '2026-11-20':[{name:"Emma's Fees", amount:300}],
+  '2026-12-18':[{name:"Emma's Fees", amount:300}],
+  '2027-01-29':[{name:"Emma's Fees", amount:300}],
+  '2027-02-26':[{name:"Emma's Fees", amount:300}],
+  '2027-03-26':[{name:"Emma's Fees", amount:300}],
+  '2027-04-23':[{name:"Emma's Fees", amount:300}],
+  '2027-05-21':[{name:"Emma's Fees", amount:300}],
+  '2027-06-18':[{name:"Emma's Fees", amount:300}],
+  '2027-07-30':[{name:"Emma's Fees", amount:300}],
+  '2027-08-27':[{name:"Emma's Fees", amount:300}],
+  '2027-09-24':[{name:"Emma's Fees", amount:300}],
+  '2027-10-22':[{name:"Emma's Fees", amount:300}],
+  '2027-11-19':[{name:"Emma's Fees", amount:300}],
+  '2027-12-31':[{name:"Emma's Fees", amount:300}],
+  '2028-01-28':[{name:"Emma's Fees", amount:300}],
+  '2028-02-25':[{name:"Emma's Fees", amount:300}],
+  '2028-03-24':[{name:"Emma's Fees", amount:300}],
+  '2028-04-21':[{name:"Emma's Fees", amount:300}],
+  '2028-05-19':[{name:"Emma's Fees", amount:300}],
+  '2028-06-30':[{name:"Emma's Fees", amount:300}],
+  '2028-07-28':[{name:"Emma's Fees", amount:300}],
+  '2028-08-25':[{name:"Emma's Fees", amount:300}],
+};
+
+// Auto insurance schedule
+function autoInscForPeriod(startDate) {
+  if (startDate === '2026-06-05') return {day:14, amount:97};
+  if (new Date(startDate+'T00:00:00') >= new Date('2026-07-03T00:00:00')) return {day:13, amount:562};
+  return {day:22, amount:635};
+}
+
+// One-off bills per period
+const ONE_OFFS = {
+  '2026-06-05':[
+    {name:'Walmart Cap', amount:35, day:null, tag:''},
+  ],
+  '2026-07-03':[
+    {name:'After Hours Party',   amount:400,  day:null, tag:'vacation'},
+    {name:"J's Birthday Budget", amount:2120, day:null, tag:'vacation'},
+  ],
+  '2026-07-17':[
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+    {name:'CC Payoff',           amount:1000, day:null, tag:'vacation'},
+    {name:'RAJ Cruise Excursions',amount:1500,day:null, tag:'vacation'},
+  ],
+  '2026-08-14':[
+    {name:'WDW Food Budget',     amount:5500, day:null, tag:'vacation'},
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+  ],
+  '2026-08-28':[
+    {name:'Car Rental (MCO)',    amount:633,  day:null, tag:'vacation'},
+    {name:'Dog Sitter',          amount:960,  day:null, tag:'vacation'},
+    {name:'RAJ Merch',           amount:500,  day:null, tag:'vacation'},
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+  ],
+  '2026-09-11':[
+    {name:'Lightning Lane',      amount:1200, day:null, tag:'vacation'},
+    {name:'Cruise Cash / Tips',  amount:100,  day:null, tag:'vacation'},
+    {name:'Cruise Placeholder',  amount:250,  day:null, tag:'vacation'},
+    {name:'RAJ Cruise Booze',    amount:1000, day:null, tag:'vacation'},
+    {name:'EE Souvenirs',        amount:200,  day:null, tag:'vacation'},
+    {name:'Car Rental (return)', amount:485,  day:null, tag:'vacation'},
+    {name:'EE Cruise Booze',     amount:500,  day:null, tag:'vacation'},
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+  ],
+  '2026-09-25':[
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+    {name:'Christmas (early)',   amount:1500, day:null, tag:'seasonal'},
+  ],
+  '2026-10-09':[{name:'Ring', amount:250, day:17, tag:'ring'}],
+  '2026-10-23':[
+    {name:'Christmas Budget',    amount:1500, day:null, tag:'seasonal'},
+    {name:'Feast / Thanksgiving',amount:500,  day:null, tag:'seasonal'},
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+  ],
+  '2026-11-06':[{name:'Ring', amount:250, day:17, tag:'ring'}],
+  '2026-11-20':[{name:'Christmas Gifts', amount:1000, day:null, tag:'seasonal'}],
+  '2027-01-01':[
+    {name:'HOA Dues',            amount:830,  day:null, tag:'seasonal'},
+    {name:'DVC Dues',            amount:850,  day:4,    tag:'seasonal'},
+  ],
+  '2027-01-30':[
+    {name:'Storage (2nd unit)',  amount:470,  day:null, tag:'seasonal'},
+  ],
+  '2027-02-13':[
+    {name:'Toyota Registration', amount:520,  day:null, tag:'seasonal'},
+    {name:'Havasu Deposit',      amount:500,  day:null, tag:'seasonal'},
+    {name:'Tesla Registration',  amount:699,  day:null, tag:'seasonal'},
+  ],
+  '2027-05-08':[
+    {name:'Havasu Trip',         amount:1800, day:null, tag:'vacation'},
+  ],
+  '2026-09-25':[
+    {name:'Ring',                amount:250,  day:17,   tag:'ring'},
+    {name:'Christmas (early)',   amount:1500, day:null, tag:'seasonal'},
+  ],
+};
+
+// ═══ STATE ═══
+let S = {balance:5377, templates:DEFAULT_TEMPLATES.map(t=>({...t})), periods:[]};
+let DC = {cards:[], tab:'periods'};
+
+function uid() { return Math.random().toString(36).slice(2,9); }
+function fmtD(n) { return '$'+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:0}); }
+
+var _statDropdown = null;
+function buildStatDropdown(type, periodIdxs) {
+  if (!periodIdxs.length || _statDropdown !== type) return null;
+  const bals = getRunningBals();
+  var items = periodIdxs.map(function(i) {
+    var p = S.periods[i];
+    var endBal = bals[i] ? bals[i].end : null; // end balance for this period
+    var isNeg = endBal !== null && endBal < 0;
+    var col = isNeg ? 'var(--red)' : 'var(--amber)';
+    var bg  = isNeg ? 'rgba(127,29,29,.3)' : 'transparent';
+    var label = endBal !== null ? (isNeg ? '−'+fmtD(endBal) : fmtD(endBal)) : '?';
+    var negAttr = isNeg ? '1' : '0';
+    return '<div class="sd-item" data-pid="'+p.id+'" data-neg="'+negAttr+'" data-bg="'+bg+'"'
+      +' onclick="jumpToPeriod(event,this.dataset.pid)"'
+      +' onmouseover="sdHover(this,true)" onmouseout="sdHover(this,false)"'
+      +' style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 10px;cursor:pointer;border-radius:4px;background:'+bg+';">'
+      +'<span style="display:flex;flex-direction:column;gap:1px;">'
+        +'<span>'+fmtDs(p.startDate)+' – '+fmtDs(p.endDate)+'</span>'
+        +'<span style="font-size:11px;color:var(--text-dim);letter-spacing:.06em;">PROJECTED END BALANCE</span>'
+      +'</span>'
+      +'<span style="font-weight:700;font-size:17px;color:'+col+';">'+label+'</span>'
+      +'</div>';
+  }).join('');
+  var wrap = document.createElement('div');
+  wrap.addEventListener('click', function(e){ e.stopPropagation(); });
+  wrap.style.cssText = 'position:absolute;top:100%;left:0;z-index:200;margin-top:6px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.5);';
+  wrap.innerHTML = '<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);padding:2px 4px 8px;">↓ Click to jump</div>' + items;
+  return wrap;
+}
+function toggleStatDropdown(type) {
+  _statDropdown = _statDropdown === type ? null : type;
+  renderHeader();
+}
+// Close the stat dropdown when clicking anywhere outside of it
+document.addEventListener('click', function() {
+  if (_statDropdown) { _statDropdown = null; renderHeader(); }
+});
+function jumpToPeriod(ev, id) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  _statDropdown = null;
+
+  // Switch tab if needed
+  if (DC.tab !== 'periods') {
+    setTab('periods');
+  }
+
+  // Open the target period
+  const p = S.periods.find(pp => pp.id === id);
+  if (p) p.open = true;
+  persist();
+
+  // Rebuild the periods list (not the full render — avoid wiping the header mid-click)
+  renderPeriods();
+  renderHeader();
+
+  // Wait one frame for DOM to settle, then scroll + flash
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      const el = document.getElementById('pd-' + id);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.style.transition = 'box-shadow .15s';
+        el.style.boxShadow = '0 0 0 3px var(--amber)';
+        setTimeout(function() { el.style.boxShadow = ''; }, 1400);
+      }
+    });
+  });
+}
+function sdHover(el, over) {
+  var isNeg = el.dataset.neg === '1';
+  el.style.background = over ? (isNeg ? 'rgba(127,29,29,.5)' : 'var(--surface2)') : el.dataset.bg;
+}
+function fmtDs(s) { const d=new Date(s+'T00:00:00'); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function parseDollars(s) { const v=parseFloat(String(s||'').replace(/[^0-9.-]/g,'')); return isNaN(v)?0:v; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
+function fmtDate(d){return d.toISOString().split('T')[0];}
+
+function periodAddlTotal(p) { return (p.additionalIncome||[]).reduce((s,a)=>s+(a.status==='cleared'?0:a.amount),0); }
+function periodIncomeTotal(p) { return (p.incomeCleared?0:p.income)+periodAddlTotal(p); }
+function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:b.amount),0); }
+
+function billDueInPeriod(day,s,e) {
+  if (day===null) return true;
+  const sd=new Date(s+'T00:00:00'), ed=new Date(e+'T00:00:00');
+  let d=new Date(sd.getFullYear(),sd.getMonth(),day);
+  if (d<sd) d=new Date(sd.getFullYear(),sd.getMonth()+1,day);
+  return d>=sd && d<=ed;
+}
+
+// ═══ MISPLACED BILL AUDIT ═══
+// For a bill's due day, find the nearest real calendar date relative to the period it's sitting in
+function nearestDueDate(day,p){
+  var sd=new Date(p.startDate+'T00:00:00'), ed=new Date(p.endDate+'T00:00:00');
+  var cands=[];
+  for(var m=-1;m<=1;m++){var d=new Date(sd.getFullYear(),sd.getMonth()+m,day);if(d.getDate()===day)cands.push(d);}
+  function dist(d){return (d>=sd&&d<=ed)?0:(d<sd?sd-d:d-ed);}
+  cands.sort(function(a,b){return dist(a)-dist(b);});
+  return cands[0]||null;
+}
+function findMisplacedBills(){
+  var out=[];var activeIdx=S.periods.findIndex(function(p){return p.active;});
+  S.periods.forEach(function(p,i){
+    if(i<activeIdx)return; // ignore closed periods
+    p.bills.forEach(function(b){
+      if(!b.day||b.status==='cleared'||b.keepHere)return; // skip variable-day, cleared, and accepted overrides
+      if(billDueInPeriod(b.day,p.startDate,p.endDate))return;
+      var due=nearestDueDate(b.day,p);
+      var target=null,ti=-1;
+      if(due){S.periods.some(function(tp,j){var sd=new Date(tp.startDate+'T00:00:00'),ed=new Date(tp.endDate+'T00:00:00');if(due>=sd&&due<=ed){target=tp;ti=j;return true;}return false;});}
+      out.push({pid:p.id,pLabel:fmtDs(p.startDate)+' – '+fmtDs(p.endDate),bid:b.id,b:b,due:due,target:target,ti:ti,activeIdx:activeIdx});
+    });
+  });
+  return out;
+}
+function openMisplacedModal(){
+  var list=findMisplacedBills();
+  if(!list.length){closeModal();render();return;}
+  var rows=list.map(function(m){
+    var b=m.b;
+    var dueStr=m.due?m.due.toLocaleDateString('en-US',{month:'short',day:'numeric'}):'?';
+    var targetStr='', canMove=false, dupNote='';
+    if(m.target&&m.target.id!==m.pid){
+      if(m.ti>=m.activeIdx){
+        targetStr='<span style="color:var(--green);">'+fmtDs(m.target.startDate)+' – '+fmtDs(m.target.endDate)+'</span>';
+        canMove=true;
+        if(m.target.bills.some(function(tb){return tb.name===b.name;}))dupNote='<div style="font-size:11px;color:var(--amber);margin-top:2px;">⚠ that period already has a bill named "'+esc(b.name)+'" — moving may create a duplicate</div>';
+      } else {
+        targetStr='<span style="color:var(--text-dim);">a closed period ('+fmtDs(m.target.startDate)+' – '+fmtDs(m.target.endDate)+')</span>';
+      }
+    } else {
+      targetStr='<span style="color:var(--text-dim);">no matching period found</span>';
+    }
+    return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:5px;margin-bottom:8px;background:var(--surface2);">'+
+      '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">'+
+        '<span style="font-weight:600;">'+esc(b.name)+'</span>'+
+        '<span style="color:var(--red);">-'+fmtD(b.amount)+'</span>'+
+        '<span style="color:var(--text-dim);font-size:12px;">due day '+b.day+' ('+dueStr+')</span>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text-mid);margin-top:3px;">Sitting in: <span style="color:var(--amber);">'+m.pLabel+'</span> &nbsp;·&nbsp; Belongs in: '+targetStr+'</div>'+
+      dupNote+
+      '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'+
+        (canMove?'<button class="btn sm primary" data-pid="'+m.pid+'" data-bid="'+m.bid+'" onclick="mbMove(this.dataset.pid,this.dataset.bid)">→ Move to correct period</button>':'')+
+        '<button class="btn sm" data-pid="'+m.pid+'" data-bid="'+m.bid+'" title="Accept this placement — it won\'t be flagged again" onclick="mbKeep(this.dataset.pid,this.dataset.bid)">✓ Keep here</button>'+
+        '<button class="btn sm danger" data-pid="'+m.pid+'" data-bid="'+m.bid+'" onclick="mbDel(this.dataset.pid,this.dataset.bid)">del</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal"><h2>⚠ Misplaced Bills ('+list.length+')</h2>'+
+      '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">These bills have a due day that doesn\'t fall inside the pay period they\'re sitting in. Move them to where they belong, keep them where they are (won\'t be flagged again), or delete them.</div>'+
+      rows+
+      '<div class="m-actions"><button class="btn" onclick="closeModal()">Close</button></div>'+
+    '</div></div>';
+}
+function mbMove(pid,bid){
+  var list=findMisplacedBills();
+  var m=list.find(function(x){return x.pid===pid&&x.bid===bid;});
+  if(!m||!m.target){openMisplacedModal();return;}
+  var p=S.periods.find(function(pp){return pp.id===pid;});
+  var bi=p?p.bills.findIndex(function(bb){return bb.id===bid;}):-1;
+  if(bi>-1){
+    var b=p.bills[bi];
+    m.target.bills.push(b); // same object — keeps status, url, autopay, etc.
+    m.target.bills.sort(function(a,c){return (a.day||99)-(c.day||99);});
+    p.bills.splice(bi,1);
+    persist();
+  }
+  render();openMisplacedModal();
+}
+function mbKeep(pid,bid){
+  var p=S.periods.find(function(pp){return pp.id===pid;});
+  var b=p&&p.bills.find(function(bb){return bb.id===bid;});
+  if(b){b.keepHere=true;persist();}
+  render();openMisplacedModal();
+}
+function mbDel(pid,bid){
+  var p=S.periods.find(function(pp){return pp.id===pid;});
+  if(p){p.bills=p.bills.filter(function(bb){return bb.id!==bid;});persist();}
+  render();openMisplacedModal();
+}
+
+function buildBillsForPeriod(p) {
+  const bills = [];
+  const ai = autoInscForPeriod(p.startDate);
+  DEFAULT_TEMPLATES.forEach(function(t) {
+    const day = t.id==='autoinsc' ? ai.day : t.day;
+    const amt = t.id==='autoinsc' ? ai.amount : t.amount;
+    if (billDueInPeriod(day, p.startDate, p.endDate)) {
+      var _st=(S.templates.find(st=>st.id===t.id)||t);
+      bills.push({id:uid(),templateId:t.id,name:t.name,amount:amt,day:day,status:_st.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:_st.url||'',autopay:!!_st.autopay});
+    }
+  });
+  (ONE_OFFS[p.startDate]||[]).forEach(function(o) {
+    bills.push({id:uid(),templateId:null,name:o.name,amount:o.amount,day:o.day||null,status:'upcoming',category:o.tag==='vacation'?'vacation':o.tag==='seasonal'?'seasonal':'fixed',tag:o.tag||''});
+  });
+  bills.sort((a,b)=>(a.day||99)-(b.day||99));
+  return bills;
+}
+
+function genPeriods(count) {
+  const periods = [];
+  let d = new Date('2026-06-05T00:00:00');
+  for (let i=0;i<count;i++) {
+    const start = fmtDate(d), end = fmtDate(addDays(d,13));
+    periods.push({
+      id:'p'+start.replace(/-/g,''), startDate:start, endDate:end,
+      income: i===0 ? 0 : 5483,
+      additionalIncome: (ADDL_INCOME_MAP[start]||[]).map(a=>({id:uid(),name:a.name,amount:a.amount})),
+      bills:[], open:i===0, active:i===0,
+    });
+    d=addDays(d,14);
+  }
+  return periods;
+}
+
+function initPeriods() {
+  S.periods = genPeriods(60);
+  S.periods.forEach(p=>{p.bills=buildBillsForPeriod(p);});
+  persist();
+}
+
+// ═══ STORAGE ═══
+function persist() { localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods})); }
+function dcPersist() { localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards})); }
+
+function loadStorage() {
+  try {
+    const r=localStorage.getItem(STORAGE_KEY);
+    if (r) { const d=JSON.parse(r); if(d.balance!==undefined)S.balance=d.balance; if(d.templates)S.templates=d.templates; if(d.periods&&d.periods.length)S.periods=d.periods; }
+  } catch(e) {}
+  if (!S.periods.length) initPeriods();
+  try {
+    const r=localStorage.getItem(DC_KEY);
+    if (r) { const d=JSON.parse(r); if(d.cards)DC.cards=d.cards; }
+  } catch(e) {}
+  // Pre-populate cards if none exist yet
+  if (!DC.cards.length) {
+    DC.cards = [
+      {id:uid(), name:'Chase Freedom',    balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+      {id:uid(), name:'Amazon',           balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+      {id:uid(), name:'Cap 1 Savor',      balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+      {id:uid(), name:'Cap 1 Walmart',    balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+      {id:uid(), name:'Cap 1 Quicksilver',balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+      {id:uid(), name:'Mercury Card',     balance:0, limit:0, apr:26, dueDay:1, minPayment:0, open:false},
+    ];
+    dcPersist();
+  }
+}
+
+// ═══ RUNNING BALANCES ═══
+function getRunningBals() {
+  const activeIdx = S.periods.findIndex(p=>p.active);
+  // Returns {start, end} per period. Cleared income/bills excluded from totals.
+  const bals=[];
+  let bal=S.balance;
+  S.periods.forEach((p,i)=>{
+    if (i<activeIdx){bals.push(null);return;}
+    var startBal = i===activeIdx ? bal : (bals[i-1]!==null ? bals[i-1].end : bal);
+    var endBal   = startBal + periodIncomeTotal(p) - periodBillsTotal(p);
+    bals.push({start:startBal, end:endBal});
+  });
+  return bals;
+}
+function activeEndBal() {
+  const p=S.periods.find(pp=>pp.active);
+  if(!p)return null;
+  return S.balance+periodIncomeTotal(p)-periodBillsTotal(p);
+}
+
+// ═══ RENDER ═══
+function setTab(tab) {
+  _statDropdown = null;
+  DC.tab=tab;
+  document.getElementById('tab-btn-periods').className='tab-btn'+(tab==='periods'?' active':'');
+  document.getElementById('tab-btn-debt').className='tab-btn'+(tab==='debt'?' active':'');
+  document.getElementById('tab-periods').style.display=tab==='periods'?'':'none';
+  document.getElementById('tab-debt').style.display=tab==='debt'?'':'none';
+  if(tab==='debt') renderDebt();
+}
+
+function render() { renderHeader(); renderTimeline(); renderPeriods(); if(S.ui_manage) renderModal(); }
+function renderTimeline() {
+  var wrap = document.getElementById('timeline-strip-wrap');
+  if (!wrap) return;
+  var bals = getRunningBals();
+  var activeIdx = S.periods.findIndex(function(p){ return p.active; });
+  var display = [];
+  S.periods.forEach(function(p, i) {
+    if (i < activeIdx) return;
+    var b = bals[i]; if (!b) return;
+    display.push({ p: p, end: b.end });
+  });
+  function fillFor(v) {
+    if (v < 0)    return '#f87171';
+    if (v < 500)  return '#fbbf24';
+    if (v < 1000) return '#d97706';
+    if (v < 2500) return '#4ade80';
+    return '#86efac';
+  }
+  var segsHtml = display.map(function(d) {
+    var fill = fillFor(d.end);
+    var hasVac = d.p.bills && d.p.bills.some(function(b){ return b.tag==='vacation'; });
+    var isActive = d.p.active;
+    var tip = fmtDs(d.p.startDate)+' – '+fmtDs(d.p.endDate)+': '+fmtD(d.end);
+    return '<div data-pid="'+d.p.id+'" onclick="jumpToPeriod(event,this.dataset.pid)" title="'+tip+'" style="'+
+      'flex:1;min-width:0;height:100%;cursor:pointer;'+
+      'background:'+fill+';opacity:'+(isActive?'1':'0.7')+';'+
+      (isActive?'box-shadow:inset 0 0 0 2px rgba(255,255,255,.6);':'')+
+      (hasVac?'background:repeating-linear-gradient(45deg,'+fill+','+fill+' 3px,rgba(96,165,250,.5) 3px,rgba(96,165,250,.5) 6px);':'')+
+    '"></div>';
+  }).join('');
+  wrap.innerHTML = '<div style="display:flex;width:100%;height:20px;gap:1px;overflow:hidden;">'+segsHtml+'</div>';
+}
+
+function renderHeader() {
+  const projEnd=activeEndBal();
+  const diff=projEnd!==null?projEnd-S.balance:0;
+  document.getElementById('bal-display').textContent='$'+S.balance.toLocaleString('en-US',{maximumFractionDigits:0});
+  const bals=getRunningBals();
+  let negCount=0,warnCount=0,tightCount=0;
+  const ai=S.periods.findIndex(p=>p.active);
+  bals.forEach(function(b,i){
+    if(i<=ai||b===null)return;
+    if(b&&b.end<0)negCount++;
+    if(b&&b.end<500)warnCount++;          // includes negatives
+    else if(b&&b.end<1000)tightCount++;   // $500–$999 only
+  });
+  // Build lists of affected period ids
+  var negPeriods = [], warnPeriods = [], tightPeriods = [];
+  bals.forEach(function(b,i) {
+    if (i <= ai || b === null) return;
+    if (b && b.end < 0) negPeriods.push(i);
+    if (b && b.end < 500) warnPeriods.push(i);          // includes negatives
+    else if (b && b.end < 1000) tightPeriods.push(i);   // $500–$999 only
+  });
+
+  // Build stats using DOM manipulation to avoid quote issues
+  var statsEl = document.getElementById('hdr-stats');
+  statsEl.innerHTML = '';
+  function makeStat(lbl, val, cls, clickFn, title) {
+    var d = document.createElement('div');
+    d.className = 'stat';
+    if (clickFn) { d.style.cursor='pointer'; d.style.position='relative'; d.title=title||''; d.addEventListener('click', clickFn); }
+    d.innerHTML = '<div class="stat-lbl">'+lbl+'</div><div class="stat-val '+cls+'">'+val+'</div>';
+    return d;
+  }
+  // Stacked stats beside the balance: Period Δ on top, Period End on bottom
+  var sideEl = document.getElementById('bal-side');
+  if (sideEl) {
+    sideEl.innerHTML =
+      '<div class="stat" title="Projected change in your balance between now and the end of the current pay period (remaining income minus remaining bills)."><div class="stat-lbl">Period Δ</div><div class="stat-val '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+fmtD(diff)+'</div></div>'+
+      '<div class="stat" title="Where your balance is projected to land at the end of the current pay period."><div class="stat-lbl">Period End</div><div class="stat-val '+(projEnd>=0?'pos':'neg')+'">'+fmtD(projEnd)+'</div></div>';
+  }
+  // Negative periods stat
+  var negStat = makeStat('END BALANCE < $0', negCount+' period'+(negCount!==1?'s':'')+(negCount>0?' ▾':''), negCount>0?'neg':'pos', negCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('neg');}:null, 'Click to see affected periods');
+  if (negCount>0) {
+    var negDrop = buildStatDropdown('neg', negPeriods);
+    if (negDrop) negStat.appendChild(negDrop);
+  }
+  statsEl.appendChild(negStat);
+  // Warning periods stat
+  var warnStat = makeStat('END BALANCE < $500', warnCount+' period'+(warnCount!==1?'s':'')+(warnCount>0?' ▾':''), warnCount>0?'amber':'pos', warnCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('warn');}:null, 'Click to see affected periods');
+  if (warnCount>0) {
+    var warnDrop = buildStatDropdown('warn', warnPeriods);
+    if (warnDrop) warnStat.appendChild(warnDrop);
+  }
+  statsEl.appendChild(warnStat);
+  // Tight periods stat ($500–$999)
+  var tightStat = makeStat('END BALANCE < $1K', tightCount+' period'+(tightCount!==1?'s':'')+(tightCount>0?' ▾':''), tightCount>0?'amber':'pos', tightCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('tight');}:null, 'Click to see affected periods');
+  if (tightCount>0) {
+    var tightDrop = buildStatDropdown('tight', tightPeriods);
+    if (tightDrop) tightStat.appendChild(tightDrop);
+  }
+  statsEl.appendChild(tightStat);
+  // Misplaced bills audit
+  var misplaced = findMisplacedBills();
+  if (misplaced.length > 0) {
+    var misStat = makeStat('⚠ MISPLACED', misplaced.length+' bill'+(misplaced.length!==1?'s':'')+' ▸', 'amber',
+      function(ev){ ev.stopPropagation(); openMisplacedModal(); },
+      'Bills whose due day falls outside the pay period they\'re sitting in — click to review');
+    statsEl.appendChild(misStat);
+  }
+  if (negCount > 0) {
+    var note = document.createElement('div');
+    note.style.cssText = 'font-size:11px;color:var(--text-dim);margin-top:4px;letter-spacing:.04em;';
+    note.textContent = '* includes vacation & trip expenses';
+    statsEl.appendChild(note);
+  }
+}
+
+function renderPeriods() {
+  const bals=getRunningBals();
+  const activeIdx=S.periods.findIndex(p=>p.active);
+  const html=S.periods.map(function(p,i){
+    const isActive=p.active, isFuture=i>activeIdx, isOpen=p.open;
+    const startBal=bals[i]!==null?bals[i].start:null;
+    const endBal=bals[i]!==null?bals[i].end:null;
+    const isTight=endBal!==null&&endBal<500&&endBal>=0;
+    const isNeg=endBal!==null&&endBal<0;
+    const remCls=isNeg?'neg':isTight?'tight':'pos';
+    const hasVac=p.bills.some(b=>b.tag==='vacation');
+    const hasAddl=periodAddlTotal(p)>0;
+    var negBorder = isNeg ? ';border-color:var(--red-dim);box-shadow:0 0 0 1px var(--red-dim)' : '';
+    const activeIdx2 = S.periods.findIndex(pp=>pp.active);
+    const isPast = !isActive && !isFuture && activeIdx2 > -1 && i < activeIdx2;
+    return '<div class="period'+(isActive?' active':'')+(isFuture?' future':'')+(isPast?' past':'')+(isOpen?' open':'')+'" id="pd-'+p.id+'" style="'+negBorder+'">'+
+      '<div class="period-hdr" onclick="togglePeriod(\''+p.id+'\')" >'+
+        (isActive?'<div class="period-badge">CURRENT</div>':'')+
+        (hasVac?'<div style="font-size:12px;color:#4ade80;">✈ WDW</div>':'')+
+        '<div class="period-dates">'+fmtDs(p.startDate)+' – '+fmtDs(p.endDate)+'</div>'+
+        '<div class="period-income">+'+fmtD(p.income)+(hasAddl?' <span style="color:var(--amber);font-size:12px;" title="Includes additional income">✦</span>':'')+'</div>'+
+        (endBal!==null?
+      (isNeg
+        ? '<div class="period-end neg" style="display:flex;align-items:center;gap:5px;"><span style="font-size:11px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--red);color:#000;">NEG</span><span>-'+fmtD(endBal)+'</span></div>'
+        : isTight
+        ? '<div class="period-end tight" style="display:flex;align-items:center;gap:5px;"><span style="font-size:11px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--amber);color:#000;">LOW</span><span>'+fmtD(endBal)+'</span></div>'
+        : '<div class="period-end pos">'+fmtD(endBal)+'</div>'
+      )
+      :'')+
+        '<div class="period-toggle">▾</div>'+
+      '</div>'+
+      (isOpen?renderPeriodBody(p,i,startBal):'')+'</div>';
+  }).join('');
+  document.getElementById('tab-periods').innerHTML=html;
+}
+
+function renderPeriodBody(p,periodIdx,startBal) {
+  let html='';
+  // Income section
+  html+='<div class="bill-row sec-hdr"><div class="sec-lbl">Income</div></div>';
+  const pcCleared=!!p.incomeCleared;
+  html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">Ryan Paycheck</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">edit</button></div></div>';
+  (p.additionalIncome||[]).forEach(function(a,ai){
+    const aCl=a.status==='cleared';
+    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">edit</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">del</button></div></div>';
+  });
+  var showAddlForm = S.ui_addAddl === p.id;
+  if (!showAddlForm) {
+    html += '<div class="bill-row" style="cursor:pointer;" onclick="S.ui_addAddl=\''+p.id+'\';render()">'+
+      '<div class="status-btn" style="border:none;color:var(--text-dim);font-size:16px;">＋</div>'+
+      '<div style="flex:1;font-size:13px;color:var(--text-dim);">Add additional income…</div>'+
+    '</div>';
+  } else {
+    html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
+      '<div style="display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:end;">'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">SOURCE</div>'+
+          '<input class="add-input" id="ai-name-'+p.id+'" placeholder="e.g. Amanda Paycheck" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddIncome(\''+p.id+'\')"></div>'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
+          '<input class="add-input" id="ai-amt-'+p.id+'" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddIncome(\''+p.id+'\')"></div>'+
+        '<div style="display:flex;gap:6px;padding-bottom:1px;">'+
+          '<button class="btn primary sm" data-pid="'+p.id+'" onclick="saveAddIncome(this.dataset.pid)">Add</button>'+
+          '<button class="btn sm" onclick="S.ui_addAddl=null;render()">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  // Bills section
+  html+='<div class="bill-row sec-hdr"><div class="sec-lbl">Bills & Expenses</div></div>';
+  if (startBal!==null) {
+    const pre = startBal + periodIncomeTotal(p);
+    html+='<div class="bill-row" style="opacity:.45;"><div class="status-btn" style="cursor:default;border:none;"></div><div class="bill-day"></div><div class="bill-name" style="color:var(--text-dim);font-size:13px;">Pre-expenses balance</div><div class="bill-amt" style="color:var(--text-mid);">+'+fmtD(pre)+'</div><div class="bill-acts"></div></div>';
+  }
+
+  var fixed=p.bills.filter(b=>b.category==='fixed'&&!b.tag);
+  var variable=p.bills.filter(b=>b.category==='variable');
+  var vacation=p.bills.filter(b=>b.tag==='vacation');
+  var seasonal=p.bills.filter(b=>b.tag==='seasonal'||b.category==='annual');
+  var ring=p.bills.filter(b=>b.tag==='ring');
+  var ccpay=p.bills.filter(b=>b.tag==='cc-payment');
+
+  function billRow(b) {
+    const isCl=b.status==='cleared', isVac=b.tag==='vacation', isSeas=b.tag==='seasonal'||b.category==='annual', isRing=b.tag==='ring', isCC=b.tag==='cc-payment';
+    const statusTip=b.status==='upcoming'
+      ? 'UPCOMING — not paid yet. Still counted against your projected balance. Click to mark Pending.'
+      : b.status==='pending'
+      ? 'PENDING — payment made or scheduled (e.g. autopay) but hasn\'t cleared the bank yet. Still counted against your projected balance. Click to mark Cleared.'
+      : 'CLEARED — payment has cleared the bank and is already reflected in your real balance, so it\'s no longer deducted from projections. Click to reset to Upcoming.';
+    return '<div class="bill-row'+(isCl?' cleared':'')+(isVac?' vacation':'')+(isSeas?' seasonal':'')+'">' +
+      '<button class="status-btn '+b.status+'" title="'+statusTip+'" onclick="cycleStatus(\''+p.id+'\',\''+b.id+'\')">'+
+        (b.status==='upcoming'?'·':b.status==='pending'?'P':'✓')+'</button>'+
+      '<div class="bill-day">'+(b.day||'~')+'</div>'+
+      '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+'</div>'+
+      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(b.amount))+'</div>'+
+      '<div class="bill-acts"><button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">edit</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">del</button></div></div>';
+  }
+
+  if(fixed.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--text-dim);">FIXED</div></div>';fixed.forEach(b=>html+=billRow(b));}
+  if(ring.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--text-dim);">💍 RING</div></div>';ring.forEach(b=>html+=billRow(b));}
+  if(variable.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--text-dim);">VARIABLE</div></div>';variable.forEach(b=>html+=billRow(b));}
+  if(ccpay.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--blue);">CC PAYMENTS</div></div>';ccpay.forEach(b=>html+=billRow(b));}
+  if(vacation.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:#1a5c1a;">✈ TRIP / VACATION</div></div>';vacation.forEach(b=>html+=billRow(b));}
+  if(seasonal.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--blue-dim);">SEASONAL / ANNUAL</div></div>';seasonal.forEach(b=>html+=billRow(b));}
+
+  // Add bill input
+  var showAddBForm = S.ui_addBill === p.id;
+  if (!showAddBForm) {
+    html += '<div class="bill-row" style="cursor:pointer;" onclick="showAddBillForm(\''+p.id+'\')">' +
+      '<div class="status-btn" style="border:none;color:var(--text-dim);font-size:16px;">＋</div>'+
+      '<div style="flex:1;font-size:13px;color:var(--text-dim);">Add a bill or expense…</div>'+
+    '</div>';
+  } else {
+    html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
+      '<div style="display:grid;grid-template-columns:1fr 110px 70px auto;gap:8px;align-items:end;">'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">NAME</div>'+
+          '<input class="add-input" id="ab-name-'+p.id+'" placeholder="e.g. Electric" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddBill(\''+p.id+'\')"></div>'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
+          '<input class="add-input" id="ab-amt-'+p.id+'" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddBill(\''+p.id+'\')"></div>'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">DUE DAY</div>'+
+          '<input class="add-input" id="ab-day-'+p.id+'" type="number" min="1" max="31" placeholder="~" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddBill(\''+p.id+'\')"></div>'+
+        '<div style="display:flex;gap:6px;padding-bottom:1px;">'+
+          '<button class="btn primary sm" data-pid="'+p.id+'" onclick="saveAddBill(this.dataset.pid)">Add</button>'+
+          '<button class="btn sm" onclick="S.ui_addBill=null;render()">✕</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }
+
+  // Footer
+  const uncl=p.bills.filter(b=>b.status!=='cleared').reduce((s,b)=>s+b.amount,0);
+  const cl=p.bills.filter(b=>b.status==='cleared').reduce((s,b)=>s+b.amount,0);
+  const vacTot=vacation.reduce((s,b)=>s+b.amount,0);
+  const projEnd=startBal!==null?startBal+periodIncomeTotal(p)-periodBillsTotal(p):null;
+  // ── Period footer ──
+  var totalIn  = periodIncomeTotal(p);
+  var totalOut = periodBillsTotal(p);
+  var isNegEnd  = projEnd !== null && projEnd < 0;
+  var isLowEnd  = projEnd !== null && projEnd >= 0 && projEnd < 1000;
+  var endColor  = isNegEnd ? 'var(--red)' : isLowEnd ? 'var(--amber)' : 'var(--green)';
+  var endBg     = isNegEnd ? 'rgba(127,29,29,.22)' : isLowEnd ? 'rgba(120,53,15,.15)' : 'transparent';
+  var endBadge  = isNegEnd
+    ? '<div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:4px;background:var(--red);color:#000;">NEGATIVE</div>'
+    : isLowEnd
+    ? '<div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:4px;background:var(--amber);color:#000;">LOW</div>'
+    : '<div style="font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:4px;background:var(--green-dim);color:var(--green);">ALL OK</div>';
+
+  html += '<div style="border-top:1px solid var(--border2);background:'+endBg+';padding:11px 14px;display:flex;align-items:center;justify-content:space-between;">';
+
+  // Left — THIS PERIOD: outgoing / incoming
+  html += '<div>';
+  html += '<div style="font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--text-dim);margin-bottom:4px;">This Period</div>';
+  html += '<div style="display:flex;align-items:baseline;gap:6px;">';
+  html += '<span style="font-size:20px;font-weight:700;color:var(--red);">'+fmtD(totalOut)+'</span>';
+  html += '<span style="font-size:15px;color:var(--text-dim);">/</span>';
+  html += '<span style="font-size:20px;font-weight:700;color:var(--green);">+'+fmtD(totalIn)+'</span>';
+  html += '</div>';
+  if (vacTot > 0) html += '<div style="font-size:11px;color:#4ade80;margin-top:2px;">✈ includes '+fmtD(vacTot)+' trip</div>';
+  html += '</div>';
+
+  // Right — Remaining balance verdict
+  if (projEnd !== null) {
+    html += '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">';
+    html += '<div style="font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--text-dim);">Remaining</div>';
+    html += '<div style="display:flex;align-items:center;gap:8px;">';
+    html += endBadge;
+    html += '<span style="font-size:20px;font-weight:700;color:'+endColor+';">'+(isNegEnd?'-':'')+fmtD(projEnd)+'</span>';
+    html += '</div>';
+    html += '</div>';
+  }
+
+  html += '</div>';
+  html+='<div class="period-footer">'+
+    (p.active?'<button class="btn sm primary" onclick="advancePeriod()" title="Move to next period">→ Advance to Next</button>':'<button class="btn sm" onclick="setActivePeriod(\''+p.id+'\')" title="Mark this as your active pay period">Set as Current</button>')+
+    '<div style="flex:1;"></div>'+
+    '<button class="btn sm danger" onclick="if(confirm(\'Remove period?\'))delPeriod(\''+p.id+'\')" style="opacity:.5;">del</button>'+
+  '</div>';
+  return '<div class="period-body">'+html+'</div>';
+}
+
+// ═══ PERIOD HANDLERS ═══
+function editBal(){const d=document.getElementById('bal-display'),i=document.getElementById('bal-input');i.value=String(S.balance);d.style.display='none';i.style.display='inline-block';i.focus();i.select();}
+function saveBal(){const i=document.getElementById('bal-input'),v=parseDollars(i.value);S.balance=isNaN(v)?S.balance:v;document.getElementById('bal-display').style.display='';i.style.display='none';persist();render();}
+function togglePeriod(id){const p=S.periods.find(pp=>pp.id===id);if(p)p.open=!p.open;persist();render();}
+function setActivePeriod(id){S.periods.forEach(p=>{p.active=p.id===id;if(p.active)p.open=true;});persist();render();}
+function cycleStatus(pid,bid){const p=S.periods.find(pp=>pp.id===pid);if(!p)return;const b=p.bills.find(bb=>bb.id===bid);if(!b)return;const c=['upcoming','pending','cleared'];b.status=c[(c.indexOf(b.status)+1)%c.length];persist();render();}
+function delBill(pid,bid){const p=S.periods.find(pp=>pp.id===pid);if(!p)return;p.bills=p.bills.filter(b=>b.id!==bid);persist();render();}
+function editBillRow(pid,bid){
+  const p=S.periods.find(pp=>pp.id===pid);const b=p?.bills.find(bb=>bb.id===bid);if(!b)return;
+  const pi=S.periods.findIndex(pp=>pp.id===pid);
+  const activeIdx=S.periods.findIndex(pp=>pp.active);
+  const nextP=pi>-1&&pi<S.periods.length-1?S.periods[pi+1]:null;
+  // Previous period is only eligible if it is not closed (i.e., index >= activeIdx)
+  const prevP=pi>0&&(pi-1)>=activeIdx?S.periods[pi-1]:null;
+  const pushBtn=nextP
+    ? '<button class="btn" style="color:var(--amber);border-color:var(--amber-dim);" data-pid="'+pid+'" data-bid="'+bid+'" data-npid="'+nextP.id+'" onclick="pushBillToNext(this.dataset.pid,this.dataset.bid,this.dataset.npid)" title="Move this bill to the next pay period">→ Next Period</button>'
+    : '';
+  const pullBtn=prevP
+    ? '<button class="btn" style="color:var(--blue);border-color:var(--blue-dim);" data-pid="'+pid+'" data-bid="'+bid+'" data-ppid="'+prevP.id+'" onclick="pullBillToPrev(this.dataset.pid,this.dataset.bid,this.dataset.ppid)" title="Pull this bill back to the previous open period">← Prev Period</button>'
+    : '';
+  var periodNav='';
+  if(prevP||nextP){
+    periodNav='<div style="margin-top:4px;padding:8px 10px;background:var(--bg);border-radius:4px;border:1px solid var(--border);font-size:12px;color:var(--text-dim);display:flex;flex-direction:column;gap:3px;">';
+    if(prevP)periodNav+='<div>← Prev (open): <span style="color:var(--blue);">'+fmtDs(prevP.startDate)+' – '+fmtDs(prevP.endDate)+'</span></div>';
+    if(nextP)periodNav+='<div>→ Next: <span style="color:var(--amber);">'+fmtDs(nextP.startDate)+' – '+fmtDs(nextP.endDate)+'</span></div>';
+    periodNav+='</div>';
+  }
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Edit Bill</h2>'+
+        '<span class="m-lbl">Name</span>'+
+        '<input class="m-input" id="eb-name" value="'+esc(b.name)+'" placeholder="Bill name">'+
+        '<span class="m-lbl">Amount ($)</span>'+
+        '<input class="m-input" id="eb-amount" type="number" min="0" step="0.01" value="'+b.amount+'" placeholder="0.00">'+
+        '<span class="m-lbl">Due Day (blank = variable)</span>'+
+        '<input class="m-input" id="eb-day" type="number" min="1" max="31" value="'+(b.day||'')+'" placeholder="1–31">'+
+        '<span class="m-lbl">Link / URL (payment site, account page — optional)</span>'+
+        '<input class="m-input" id="eb-url" type="url" value="'+esc(b.url||'')+'" placeholder="https://…">'+
+        '<label style="display:flex;align-items:center;gap:8px;margin:2px 0 10px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+          '<input type="checkbox" id="eb-autopay" '+(b.autopay?'checked':'')+' style="accent-color:var(--amber);width:15px;height:15px;cursor:pointer;">'+
+          '<span>⚡ On Autopay <span style="color:var(--text-dim);font-size:11px;">(automatically marks as Pending)</span></span>'+
+        '</label>'+
+        periodNav+
+        '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
+          pullBtn+
+          pushBtn+
+          '<div style="flex:1;"></div>'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-pid="'+pid+'" data-bid="'+bid+'" onclick="saveEditBill(this.dataset.pid,this.dataset.bid)">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){
+    var el=document.getElementById('eb-amount');
+    if(el){el.focus();el.select();}
+  },50);
+}
+function pullBillToPrev(pid,bid,ppid){
+  const p=S.periods.find(pp=>pp.id===pid);
+  const prevP=S.periods.find(pp=>pp.id===ppid);
+  const activeIdx=S.periods.findIndex(pp=>pp.active);
+  const prevIdx=S.periods.findIndex(pp=>pp.id===ppid);
+  if(!p||!prevP)return;
+  // Safety guard: never allow pulling into a closed (past) period
+  if(prevIdx<activeIdx){alert('Cannot pull a bill into a closed period.');return;}
+  const bi=p.bills.findIndex(bb=>bb.id===bid);
+  if(bi===-1)return;
+  const b=p.bills[bi];
+  prevP.bills.push({...b,id:uid(),status:'upcoming'});
+  prevP.bills.sort((a,c)=>(a.day||99)-(c.day||99));
+  p.bills.splice(bi,1);
+  persist();closeModal();render();
+}
+function saveEditBill(pid,bid){
+  const p=S.periods.find(pp=>pp.id===pid);const b=p?.bills.find(bb=>bb.id===bid);if(!b){closeModal();return;}
+  const oldName=b.name;
+  const n=document.getElementById('eb-name')?.value.trim();
+  const a=document.getElementById('eb-amount')?.value;
+  const d=document.getElementById('eb-day')?.value;
+  let u=(document.getElementById('eb-url')?.value||'').trim();
+  if(u&&!/^https?:\/\//i.test(u))u='https://'+u; // normalize scheme
+  if(n)b.name=n;
+  const av=parseFloat(a);if(!isNaN(av))b.amount=av;
+  const oldDay=b.day;
+  b.day=d&&d.trim()?parseInt(d):null;
+  if(b.day!==oldDay)delete b.keepHere; // due day changed — let the misplaced audit re-check it
+  const urlChanged=(b.url||'')!==u;
+  b.url=u;
+  const ap=!!document.getElementById('eb-autopay')?.checked;
+  b.autopay=ap;
+  if(ap&&b.status==='upcoming')b.status='pending'; // autopay bills auto-flip to Pending
+  // If it's a recurring bill, offer to propagate changes forward
+  if(b.templateId){
+    _pendingRipple={type:'template',pid:pid,tplId:b.templateId,n:n,av:av,day:b.day,u:u,ap:ap};
+    showRippleChoice('<b style="color:var(--text);">'+esc(b.name)+'</b> is a recurring bill.<br>Apply these changes to all future periods, or just this one?');
+    return;
+  } else if(urlChanged){
+    // Non-template bill: offer to ripple the URL forward to same-named bills in future periods
+    const pi=S.periods.findIndex(pp=>pp.id===pid);
+    let matches=0;
+    S.periods.forEach((fp,fi)=>{if(fi>pi)fp.bills.forEach(bb=>{if(bb.name===oldName||bb.name===b.name)matches++;});});
+    if(matches>0){
+      _pendingRipple={type:'name',pid:pid,oldName:oldName,newName:b.name,u:u};
+      showRippleChoice('Apply this link to '+matches+' future <b style="color:var(--text);">'+esc(b.name)+'</b> bill'+(matches>1?'s':'')+', or just this one?');
+      return;
+    }
+  }
+  persist();closeModal();render();
+}
+var _pendingRipple=null;
+function showRippleChoice(msgHtml){
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop">'+
+      '<div class="modal sm"><h2>Apply Changes</h2>'+
+        '<div style="font-size:14px;color:var(--text-mid);line-height:1.6;margin:4px 0 14px;">'+msgHtml+'</div>'+
+        '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
+          '<button class="btn" onclick="rippleJustOnce()">Just this one time</button>'+
+          '<div style="flex:1;"></div>'+
+          '<button class="btn primary" onclick="rippleApplyAll()">Apply to all periods</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+function rippleJustOnce(){
+  _pendingRipple=null;
+  persist();closeModal();render();
+}
+function rippleApplyAll(){
+  const r=_pendingRipple;_pendingRipple=null;
+  if(r){
+    const pi=S.periods.findIndex(pp=>pp.id===r.pid);
+    if(r.type==='template'){
+      S.periods.forEach((fp,fi)=>{
+        if(fi<=pi)return;
+        const fb=fp.bills.find(bb=>bb.templateId===r.tplId);
+        if(fb){
+          if(r.n)fb.name=r.n;if(!isNaN(r.av))fb.amount=r.av;if(r.day!==null)fb.day=r.day;fb.url=r.u;
+          fb.autopay=r.ap;
+          if(r.ap&&fb.status==='upcoming')fb.status='pending';
+          else if(!r.ap&&fb.status==='pending')fb.status='upcoming';
+        }
+      });
+      const tplIdx=S.templates.findIndex(t=>t.id===r.tplId);
+      if(tplIdx>-1){if(r.n)S.templates[tplIdx].name=r.n;if(!isNaN(r.av))S.templates[tplIdx].amount=r.av;S.templates[tplIdx].url=r.u;S.templates[tplIdx].autopay=r.ap;}
+    } else if(r.type==='name'){
+      S.periods.forEach((fp,fi)=>{
+        if(fi<=pi)return;
+        fp.bills.forEach(bb=>{if(bb.name===r.oldName||bb.name===r.newName)bb.url=r.u;});
+      });
+    }
+  }
+  persist();closeModal();render();
+}
+function pushBillToNext(pid,bid,npid){
+  const p=S.periods.find(pp=>pp.id===pid);
+  const np=S.periods.find(pp=>pp.id===npid);
+  if(!p||!np)return;
+  const bi=p.bills.findIndex(bb=>bb.id===bid);
+  if(bi===-1)return;
+  const b=p.bills[bi];
+  // Add to next period
+  np.bills.push({...b,id:uid(),status:'upcoming'});
+  np.bills.sort((a,c)=>(a.day||99)-(c.day||99));
+  // Remove from this period
+  p.bills.splice(bi,1);
+  persist();closeModal();render();
+}
+// Toggle income received status — clears income from projections (already in balance manually)
+function toggleIncome(pid){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
+  p.incomeCleared=!p.incomeCleared;
+  persist();render();
+}
+function toggleAddlIncome(pid,idx){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
+  const a=(p.additionalIncome||[])[idx];if(!a)return;
+  a.status=a.status==='cleared'?'upcoming':'cleared';
+  persist();render();
+}
+function showAddBillForm(pid) {
+  S.ui_addBill = pid;
+  render();
+  setTimeout(function(){ var el=document.getElementById('ab-name-'+pid); if(el)el.focus(); }, 50);
+}
+function saveAddBill(pid){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
+  const name=(document.getElementById('ab-name-'+pid)?.value||'').trim();
+  const amt=parseFloat(document.getElementById('ab-amt-'+pid)?.value)||0;
+  const dayEl=document.getElementById('ab-day-'+pid);
+  const day=dayEl&&dayEl.value.trim()?parseInt(dayEl.value):null;
+  if(!name)return;
+  p.bills.push({id:uid(),templateId:null,name,amount:amt,day,status:'upcoming',category:'fixed',tag:''});
+  p.bills.sort((a,b)=>(a.day||99)-(b.day||99));
+  S.ui_addBill=null;
+  persist();render();
+}
+function saveAddIncome(pid){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
+  const name=(document.getElementById('ai-name-'+pid)?.value||'Additional Income').trim();
+  const amt=parseFloat(document.getElementById('ai-amt-'+pid)?.value)||0;
+  if(!p.additionalIncome)p.additionalIncome=[];
+  p.additionalIncome.push({id:uid(),name,amount:amt});
+  S.ui_addAddl=null;
+  persist();render();
+}
+function editAddl(pid,idx){
+  const p=S.periods.find(pp=>pp.id===pid);const a=p?.additionalIncome?.[idx];if(!a)return;
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Edit Income</h2>'+
+        '<span class="m-lbl">Name</span>'+
+        '<input class="m-input" id="ea-name" value="'+esc(a.name)+'" placeholder="Income name">'+
+        '<span class="m-lbl">Amount ($)</span>'+
+        '<input class="m-input" id="ea-amt" type="number" min="0" step="0.01" value="'+a.amount+'" placeholder="0.00">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-pid="'+pid+'" data-idx="'+idx+'" onclick="saveAddl(this.dataset.pid,this.dataset.idx)">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById('ea-amt');if(el){el.focus();el.select();}},50);
+}
+function saveAddl(pid,idx){
+  const p=S.periods.find(pp=>pp.id===pid);const a=p?.additionalIncome?.[parseInt(idx)];if(!a){closeModal();return;}
+  const n=document.getElementById('ea-name')?.value.trim();
+  const v=parseFloat(document.getElementById('ea-amt')?.value);
+  if(n)a.name=n;if(!isNaN(v))a.amount=v;
+  persist();closeModal();render();
+}
+function delAddl(pid,idx){const p=S.periods.find(pp=>pp.id===pid);if(p?.additionalIncome){p.additionalIncome.splice(idx,1);persist();render();}}
+function editPaycheck(pid){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Edit Paycheck</h2>'+
+        '<span class="m-lbl">Amount ($) — set to 0 if already in balance</span>'+
+        '<input class="m-input" id="ep-amt" type="number" min="0" step="0.01" value="'+p.income+'" placeholder="0.00">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-pid="'+pid+'" onclick="savePaycheck(this.dataset.pid)">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById('ep-amt');if(el){el.focus();el.select();}},50);
+}
+function savePaycheck(pid){
+  const p=S.periods.find(pp=>pp.id===pid);
+  const v=parseFloat(document.getElementById('ep-amt')?.value);
+  if(!isNaN(v))p.income=v;
+  persist();closeModal();render();
+}
+function delPeriod(id){S.periods=S.periods.filter(p=>p.id!==id);persist();render();}
+function advancePeriod(){
+  const ai=S.periods.findIndex(p=>p.active);
+  if(ai===-1||ai>=S.periods.length-1)return;
+  if(!confirm('Advance to next period? Balance will update to projected end.'))return;
+  const p=S.periods[ai];
+  // Settle: add only non-cleared income (cleared was already manually folded in), subtract non-cleared bills
+  S.balance=Math.round(S.balance+periodIncomeTotal(p)-periodBillsTotal(p));
+  p.active=false;p.open=false;
+  p.bills.forEach(b=>{if(b.status!=='cleared')b.status='cleared';});
+  S.periods[ai+1].active=true;S.periods[ai+1].open=true;
+  persist();render();
+}
+
+// ═══ MANAGE BILLS MODAL ═══
+function openManage(){S.ui_manage=true;render();renderModal();}
+function closeManage(){S.ui_manage=false;document.getElementById('modal-root').innerHTML='';render();}
+function renderModal(){
+  const rows=S.templates.map((t,i)=>
+    '<div class="trow">'+
+      '<input class="m-input" style="margin:0;flex:1;" value="'+esc(t.name)+'" onchange="updTpl('+i+',\'name\',this.value)" placeholder="Name">'+
+      '<input class="m-input" style="margin:0;width:55px;" type="number" value="'+(t.day||'')+'" onchange="updTpl('+i+',\'day\',this.value?parseInt(this.value):null)" placeholder="Day">'+
+      '<input class="m-input" style="margin:0;width:85px;" type="number" value="'+t.amount+'" onchange="updTpl('+i+',\'amount\',parseFloat(this.value)||0)" placeholder="Amt">'+
+      '<button class="btn sm danger" onclick="delTpl('+i+')">del</button>'+
+    '</div>').join('');
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeManage()">'+
+      '<div class="modal">'+
+        '<h2>Recurring Bills</h2>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Changes apply to future periods via Rebuild.</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 55px 85px 32px;gap:8px;padding:0 0 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;"><span>Name</span><span>Day</span><span>Amount</span><span></span></div>'+
+        rows+
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'+
+          '<input class="m-input" id="new-tpl" placeholder="New bill  |  name : amount : day" onkeydown="if(event.key===\'Enter\')addTpl(this.value)">'+
+        '</div>'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeManage()">Close</button>'+
+          '<button class="btn primary" onclick="rebuildFuture()">↻ Rebuild Future</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+function updTpl(i,f,v){S.templates[i][f]=v;persist();}
+function delTpl(i){if(confirm('Remove?')){S.templates.splice(i,1);persist();renderModal();}}
+function addTpl(raw){
+  const pts=raw.split(':');const name=(pts[0]||'').trim(),amt=parseDollars(pts[1]||'0'),day=pts[2]?parseInt(pts[2].trim()):null;
+  if(!name||!amt){alert('Format: Name : Amount : Day');return;}
+  S.templates.push({id:uid(),name,day,amount:amt,active:true,category:'fixed'});
+  persist();renderModal();document.getElementById('new-tpl').value='';
+}
+function rebuildFuture(){
+  if(!confirm('Rebuild future periods?'))return;
+  const ai=S.periods.findIndex(p=>p.active);
+  S.periods.forEach((p,i)=>{
+    if(i<=ai)return;
+    const nb=buildBillsForPeriod(p);
+    p.bills=nb.map(b=>{const ex=p.bills.find(e=>e.templateId&&e.templateId===b.templateId);return ex?{...b,status:ex.status}:b;});
+  });
+  persist();closeManage();render();
+}
+
+// ═══ DEBT COLLECTOR ═══
+function calcMonthlyInt(bal,apr){return Math.round(bal*(apr/100/365)*30*100)/100;}
+function calcPayoffMonths(bal,apr,mp){
+  if(mp<=0)return Infinity;
+  const mr=apr/100/12;
+  if(mr===0)return Math.ceil(bal/mp);
+  if(mp<=bal*mr)return Infinity;
+  return Math.ceil(-Math.log(1-(bal*mr)/mp)/Math.log(1+mr));
+}
+function fmtMonths(m){if(!isFinite(m))return '∞';if(m<12)return m+'mo';return Math.floor(m/12)+'y '+(m%12)+'mo';}
+function nextDueDate(dueDay){
+  const now=new Date();let d=new Date(now.getFullYear(),now.getMonth(),dueDay);
+  if(d<=now)d=new Date(now.getFullYear(),now.getMonth()+1,dueDay);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function utilClass(b,l){if(!l)return 'ok';const p=b/l*100;if(p>=90)return 'maxed';if(p>=70)return 'high';return 'ok';}
+function utilPct(b,l){if(!l)return '';return Math.round(b/l*100)+'%';}
+function utilColor(b,l){const c=utilClass(b,l);return c==='maxed'?'var(--red)':c==='high'?'var(--amber)':'var(--green)';}
+
+function getAvalanche(){return [...DC.cards].sort((a,b)=>(b.apr||26)-(a.apr||26));}
+function avalancheRank(card){return getAvalanche().findIndex(c=>c.id===card.id)+1;}
+
+function renderDebt(){
+  const el=document.getElementById('tab-debt');if(!el)return;
+  const cards=DC.cards;
+  const totBal=cards.reduce((s,c)=>s+(c.balance||0),0);
+  const totLim=cards.reduce((s,c)=>s+(c.limit||0),0);
+  const totMin=cards.reduce((s,c)=>s+(c.minPayment||0),0);
+  const totInt=cards.reduce((s,c)=>s+calcMonthlyInt(c.balance||0,c.apr||26),0);
+  const av=getAvalanche();
+  let html='';
+
+  // Summary
+  html+='<div class="dc-stat-row">'+
+    '<div class="stat"><div class="stat-lbl">Total Debt</div><div class="stat-val neg">-'+fmtD(totBal)+'</div></div>'+
+    (totLim?'<div class="stat"><div class="stat-lbl">Total Limit</div><div class="stat-val neu">'+fmtD(totLim)+'</div></div>':'')+
+    '<div class="stat"><div class="stat-lbl">Monthly Mins</div><div class="stat-val amber">-'+fmtD(totMin)+'</div></div>'+
+    '<div class="stat"><div class="stat-lbl">Monthly Interest</div><div class="stat-val neg">+'+fmtD(totInt)+'</div></div>'+
+  '</div>';
+
+  // Avalanche order
+  if(av.length>1){
+    html+='<div class="dc-avalanche">⚡ <strong style="color:var(--text-mid);">Avalanche order (highest APR first):</strong> '+
+      av.map((c,i)=>'<span style="color:'+(i===0?'var(--red)':'var(--text-mid)')+';">'+esc(c.name)+' <span style="color:var(--text-dim);">('+( c.apr||26)+'%)</span></span>').join(' → ')+'</div>';
+  }
+
+  // Cards
+  cards.forEach(function(card){
+    const bal=card.balance||0, lim=card.limit||0, apr=card.apr||26;
+    const interest=calcMonthlyInt(bal,apr);
+    const nextBal=bal+interest;
+    const payoffMo=calcPayoffMonths(bal,apr,card.minPayment||0);
+    const uCls=utilClass(bal,lim);
+    const isOpen=card.open;
+    const rank=avalancheRank(card);
+
+    html+='<div class="dc-card '+uCls+(isOpen?' open':'')+'" id="dcc-'+card.id+'">'+
+      '<div class="dc-card-hdr" onclick="dcToggle(\''+card.id+'\')">'+
+        (rank===1&&cards.length>1?'<span style="color:var(--red);margin-right:2px;" title="Avalanche #1 — pay this first">🎯</span>':'')+
+        '<div class="dc-card-name">'+(card.url?'<a class="bill-link" href="'+esc(card.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(card.url)+'">'+esc(card.name)+' <span style="font-size:11px;">↗</span></a>':esc(card.name))+'</div>'+
+        '<div class="dc-int">+'+fmtD(interest)+' on '+nextDueDate(card.dueDay||1)+'</div>'+
+        (lim?'<div class="dc-util '+uCls+'">'+utilPct(bal,lim)+'</div>':'')+
+        '<div class="dc-bal">-'+fmtD(bal)+'</div>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-left:4px;">▾</div>'+
+      '</div>';
+
+    if(lim){const pct=Math.min(bal/lim*100,100);html+='<div class="dc-bar-wrap"><div class="dc-bar-fill" style="width:'+pct+'%;background:'+utilColor(bal,lim)+';"></div></div>';}
+
+    if(isOpen){
+      html+='<div class="dc-body">'+
+        '<div class="dc-grid">'+
+          '<div class="dc-field"><div class="dc-label">Current Balance</div><input class="dc-input" type="number" value="'+bal+'" min="0" step="0.01" data-cid="'+card.id+'" data-field="balance" onchange="dcUpdate(this.dataset.cid,this.dataset.field,parseFloat(this.value)||0)"></div>'+
+          '<div class="dc-field"><div class="dc-label">Credit Limit</div><input class="dc-input" type="number" value="'+(lim||'')+'" min="0" data-cid="'+card.id+'" data-field="limit" onchange="dcUpdate(this.dataset.cid,this.dataset.field,parseFloat(this.value)||0)"></div>'+
+          '<div class="dc-field"><div class="dc-label">APR %</div><input class="dc-input" type="number" value="'+apr+'" min="0" max="100" step="0.1" data-cid="'+card.id+'" data-field="apr" onchange="dcUpdate(this.dataset.cid,this.dataset.field,parseFloat(this.value)||26)"></div>'+
+          '<div class="dc-field"><div class="dc-label">Due Day</div><input class="dc-input" type="number" value="'+(card.dueDay||1)+'" min="1" max="31" data-cid="'+card.id+'" data-field="dueDay" onchange="dcUpdate(this.dataset.cid,this.dataset.field,parseInt(this.value)||1)"></div>'+
+          '<div class="dc-field"><div class="dc-label">Min Payment</div><input class="dc-input" type="number" value="'+(card.minPayment||'')+'" min="0" step="0.01" data-cid="'+card.id+'" data-field="minPayment" onchange="dcUpdate(this.dataset.cid,this.dataset.field,parseFloat(this.value)||0)"></div>'+
+          '<div class="dc-field"><div class="dc-label">Payoff @ Min</div><div class="dc-val" style="color:'+(isFinite(payoffMo)?'var(--amber)':'var(--red)')+';">'+fmtMonths(payoffMo)+'</div></div>'+
+          '<div class="dc-field" style="grid-column:1/-1;"><div class="dc-label">Link / URL (card login or payment page)</div><input class="dc-input" type="url" value="'+esc(card.url||'')+'" placeholder="https://…" data-cid="'+card.id+'" onchange="dcUpdateUrl(this.dataset.cid,this.value)"></div>'+
+        '</div>'+
+        '<div class="dc-proj">'+
+          '<span style="color:var(--text-dim);">Next statement (~'+nextDueDate(card.dueDay||1)+'):</span> '+
+          '<span>'+fmtD(bal)+'</span> '+
+          '<span style="color:var(--text-dim);">+ '+apr+'% → </span>'+
+          '<span style="color:var(--red);">+'+fmtD(interest)+'</span> = '+
+          '<span style="color:var(--amber);font-weight:600;">'+fmtD(nextBal)+'</span>'+
+          (card.minPayment?'<br><span style="font-size:13px;color:var(--text-dim);">After min payment: </span><span style="font-size:13px;color:var(--text-mid);">'+fmtD(Math.max(0,nextBal-card.minPayment))+'</span>':'')+
+        '</div>'+
+        '<div class="dc-actions">'+
+          '<button class="btn sm primary" data-cid="'+card.id+'" onclick="dcSpent(this.dataset.cid)">+ Spent</button>'+
+          '<button class="btn sm" data-cid="'+card.id+'" onclick="dcPayModal(this.dataset.cid)">💳 Pay</button>'+
+          '<button class="btn sm" data-cid="'+card.id+'" onclick="dcMoveUp(this.dataset.cid)">↑</button>'+
+          '<button class="btn sm" data-cid="'+card.id+'" onclick="dcMoveDown(this.dataset.cid)">↓</button>'+
+          '<button class="btn sm danger" data-cid="'+card.id+'" onclick="dcDel(this.dataset.cid)">del</button>'+
+        '</div>';
+
+      // Scheduled payments tracker
+      if(card.scheduledPayments&&card.scheduledPayments.length){
+        html+='<div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--bg);">';
+        html+='<div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;">Scheduled Payments</div>';
+        card.scheduledPayments.forEach(function(sp,si){
+          var isDone=S.periods.find(function(p){return p.id===sp.periodId&&p.bills.some(function(b){return b.tag==='cc-payment'&&b.name.indexOf(card.name)>-1&&b.status==='cleared';});});
+          html+='<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;">';
+          html+='<span style="color:'+(isDone?'var(--green)':'var(--text-dim)')+';">'+(isDone?'✓':'○')+'</span>';
+          html+='<span style="color:var(--text-mid);">'+sp.periodLabel+'</span>';
+          html+='<span style="color:var(--green);margin-left:auto;">'+fmtD(sp.amount)+'</span>';
+          html+='<button class="btn sm danger" style="padding:1px 5px;font-size:11px;" data-cid="'+card.id+'" data-si="'+si+'" onclick="dcRemovePayment(this.dataset.cid,this.dataset.si)">✕</button>';
+          html+='</div>';
+        });
+        html+='</div>';
+      }
+
+      html+='</div>';
+    }
+    html+='</div>';
+  });
+
+  html+='<button class="btn primary" style="margin-top:12px;" onclick="dcAddModal()">＋ Add Card</button>';
+  el.innerHTML=html;
+}
+
+function dcToggle(id){const c=DC.cards.find(c=>c.id===id);if(c){c.open=!c.open;dcPersist();renderDebt();}}
+function dcUpdate(id,field,val){const c=DC.cards.find(c=>c.id===id);if(c){c[field]=val;dcPersist();renderDebt();}}
+function dcUpdateUrl(id,val){
+  const c=DC.cards.find(c=>c.id===id);if(!c)return;
+  let u=(val||'').trim();
+  if(u&&!/^https?:\/\//i.test(u))u='https://'+u;
+  c.url=u;dcPersist();renderDebt();
+}
+function dcMoveUp(id){const i=DC.cards.findIndex(c=>c.id===id);if(i>0){[DC.cards[i-1],DC.cards[i]]=[DC.cards[i],DC.cards[i-1]];dcPersist();renderDebt();}}
+function dcMoveDown(id){const i=DC.cards.findIndex(c=>c.id===id);if(i<DC.cards.length-1){[DC.cards[i],DC.cards[i+1]]=[DC.cards[i+1],DC.cards[i]];dcPersist();renderDebt();}}
+function dcDel(id){if(confirm('Remove card?')){DC.cards=DC.cards.filter(c=>c.id!==id);dcPersist();renderDebt();}}
+
+function dcAddModal(){
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Add Credit Card</h2>'+
+        '<span class="m-lbl">Card Name</span><input class="m-input" id="dc-name" placeholder="e.g. Cap 1 Savor">'+
+        '<div class="m-row">'+
+          '<div><span class="m-lbl">Balance ($)</span><input class="m-input" id="dc-bal" type="number" min="0" step="0.01" placeholder="0.00"></div>'+
+          '<div><span class="m-lbl">Credit Limit ($)</span><input class="m-input" id="dc-lim" type="number" min="0" placeholder="5000"></div>'+
+        '</div>'+
+        '<div class="m-row">'+
+          '<div><span class="m-lbl">APR % (default 26)</span><input class="m-input" id="dc-apr" type="number" min="0" max="100" step="0.1" value="26"></div>'+
+          '<div><span class="m-lbl">Due Day of Month</span><input class="m-input" id="dc-due" type="number" min="1" max="31" placeholder="14"></div>'+
+        '</div>'+
+        '<span class="m-lbl">Min Payment ($)</span><input class="m-input" id="dc-min" type="number" min="0" step="0.01" placeholder="0.00">'+
+        '<span class="m-lbl">Link / URL (card login or payment page — optional)</span><input class="m-input" id="dc-url" type="url" placeholder="https://…">'+
+        '<div class="m-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="dcSaveNew()">Add Card</button></div>'+
+      '</div>'+
+    '</div>';
+}
+function dcSaveNew(){
+  const name=document.getElementById('dc-name').value.trim();if(!name){alert('Name required');return;}
+  let u=(document.getElementById('dc-url')?.value||'').trim();
+  if(u&&!/^https?:\/\//i.test(u))u='https://'+u;
+  DC.cards.push({id:uid(),name,balance:parseFloat(document.getElementById('dc-bal').value)||0,limit:parseFloat(document.getElementById('dc-lim').value)||0,apr:parseFloat(document.getElementById('dc-apr').value)||26,dueDay:parseInt(document.getElementById('dc-due').value)||1,minPayment:parseFloat(document.getElementById('dc-min').value)||0,url:u,open:true});
+  dcPersist();closeModal();renderDebt();
+}
+
+function dcSpent(id){
+  const c=DC.cards.find(c=>c.id===id);if(!c)return;
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Charge to '+esc(c.name)+'</h2>'+
+        '<span class="m-lbl">Amount Spent ($)</span>'+
+        '<input class="m-input" id="dc-spent-amt" type="number" min="0" step="0.01" placeholder="0.00" autofocus '+
+          'oninput="const v=parseFloat(this.value)||0;const el=document.getElementById(\'dc-spent-prev\');if(el)el.textContent=\'$\'+('+c.balance+'+v).toLocaleString(\'en-US\',{maximumFractionDigits:0})">'+
+        '<div style="font-size:13px;color:var(--text-dim);margin-top:4px;">Current: '+fmtD(c.balance)+' → <span id="dc-spent-prev" style="color:var(--amber);">'+fmtD(c.balance)+'</span></div>'+
+        '<div class="m-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" data-cid="'+id+'" onclick="dcSaveSpent(this.dataset.cid)">Add Charge</button></div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(()=>{const i=document.getElementById('dc-spent-amt');if(i)i.focus();},50);
+}
+function dcSaveSpent(id){
+  const c=DC.cards.find(c=>c.id===id);const amt=parseFloat(document.getElementById('dc-spent-amt')?.value)||0;
+  if(c){c.balance=Math.round((c.balance+amt)*100)/100;dcPersist();}
+  closeModal();renderDebt();
+}
+
+// Find all future periods where a given due day falls within that period
+function dcGetEligiblePeriods(dueDay){
+  var result=[];
+  var activeIdx=S.periods.findIndex(function(p){return p.active;});
+  S.periods.forEach(function(p,i){
+    if(i<activeIdx)return;
+    var sd=new Date(p.startDate+'T00:00:00');
+    var ed=new Date(p.endDate+'T00:00:00');
+    var d=new Date(sd.getFullYear(),sd.getMonth(),dueDay);
+    if(d<sd)d=new Date(sd.getFullYear(),sd.getMonth()+1,dueDay);
+    if(d>=sd&&d<=ed)result.push({p:p,i:i});
+  });
+  return result;
+}
+function dcPayModal(id){
+  const c=DC.cards.find(c=>c.id===id);if(!c)return;
+  var eligible=dcGetEligiblePeriods(c.dueDay||1);
+  var periodRows='';
+  eligible.slice(0,6).forEach(function(ep,idx){
+    var p=ep.p;
+    var alreadyPaid=p.bills.some(function(b){return b.tag==='cc-payment'&&b.name.indexOf(c.name)>-1;});
+    var label=fmtDs(p.startDate)+' – '+fmtDs(p.endDate);
+    periodRows+=
+      '<label style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:13px;color:'+(alreadyPaid?'var(--text-dim)':'var(--text-mid)')+';">'+
+        '<input type="radio" name="dc-pay-period" value="'+p.id+'" '+(idx===0?'checked':'')+' style="accent-color:var(--green);">'+
+        '<span>'+label+'</span>'+
+        (alreadyPaid?'<span style="font-size:11px;color:var(--green);margin-left:auto;">✓ scheduled</span>':'')+
+      '</label>';
+  });
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Pay '+esc(c.name)+'</h2>'+
+        '<div style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">'+
+          'Balance: <span style="color:var(--red);">-'+fmtD(c.balance)+'</span> &nbsp;·&nbsp; Min: <span style="color:var(--amber);">'+fmtD(c.minPayment||0)+'</span>'+
+        '</div>'+
+        '<span class="m-lbl">Payment Amount ($)</span>'+
+        '<input class="m-input" id="dc-pay-amt" type="number" min="0" step="0.01" value="'+(c.minPayment||'')+'" placeholder="0.00" '+
+          'oninput="var v=parseFloat(this.value)||0;var el=document.getElementById(\'dc-pay-prev\');if(el)el.textContent=\'\u2192 New balance: \'+Math.max(0,'+Math.round(c.balance*100)/100+'-v).toLocaleString();">'+
+        '<div id="dc-pay-prev" style="font-size:13px;color:var(--green);margin-bottom:12px;"></div>'+
+        '<span class="m-lbl">Add to Pay Period</span>'+
+        '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:4px;padding:6px 10px;margin-bottom:12px;">'+
+          (periodRows||'<div style="font-size:13px;color:var(--text-dim);">No matching periods found for due day '+(c.dueDay||1)+'</div>')+
+        '</div>'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-cid="'+id+'" onclick="dcSavePay(this.dataset.cid)">💳 Apply Payment</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+function dcSavePay(id){
+  const c=DC.cards.find(c=>c.id===id);
+  const amt=parseFloat(document.getElementById('dc-pay-amt')?.value)||0;
+  const selectedPid=document.querySelector('input[name="dc-pay-period"]:checked')?.value;
+  if(c&&amt>0){
+    c.balance=Math.max(0,Math.round((c.balance-amt)*100)/100);
+    if(!c.scheduledPayments)c.scheduledPayments=[];
+    if(selectedPid){
+      const tp=S.periods.find(p=>p.id===selectedPid);
+      if(tp){
+        tp.bills.push({id:uid(),templateId:null,name:'CC Payment — '+c.name,amount:amt,day:c.dueDay||null,status:'upcoming',category:'fixed',tag:'cc-payment',url:c.url||''});
+        tp.bills.sort((a,b)=>(a.day||99)-(b.day||99));
+        persist();
+        c.scheduledPayments.push({periodId:selectedPid,periodLabel:fmtDs(tp.startDate)+' – '+fmtDs(tp.endDate),amount:amt,paid:false});
+      }
+    }
+    dcPersist();
+  }
+  closeModal();renderDebt();render();
+}
+function dcRemovePayment(id,si){
+  var c=DC.cards.find(c=>c.id===id);if(!c||!c.scheduledPayments)return;
+  var sp=c.scheduledPayments[parseInt(si)];
+  if(sp){
+    var tp=S.periods.find(p=>p.id===sp.periodId);
+    if(tp){tp.bills=tp.bills.filter(function(b){return!(b.tag==='cc-payment'&&b.name.indexOf(c.name)>-1&&b.amount===sp.amount);});persist();}
+    c.scheduledPayments.splice(parseInt(si),1);
+    dcPersist();
+  }
+  renderDebt();render();
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+function exportData(){
+  const blob=new Blob([JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,dc:DC.cards},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ledger_'+new Date().toISOString().split('T')[0]+'.json';a.click();URL.revokeObjectURL(a.href);
+}
+
+// ═══ BALANCE MAP ═══
+function renderViz() {
+  var el = document.getElementById('tab-viz');
+  if (!el) return;
+
+  var bals = getRunningBals();
+  var activeIdx = S.periods.findIndex(function(p){ return p.active; });
+
+  var display = [];
+  S.periods.forEach(function(p, i) {
+    if (i < activeIdx) return;
+    var b = bals[i];
+    if (!b) return;
+    display.push({ p: p, i: i, end: b.end });
+  });
+
+  function tierFor(v) {
+    if (v < 0)    return { fill:'#f87171', label:'NEG',    title:'Negative' };
+    if (v < 500)  return { fill:'#fbbf24', label:'<$500',  title:'Under $500' };
+    if (v < 1000) return { fill:'#d97706', label:'<$1k',   title:'Under $1k' };
+    if (v < 2500) return { fill:'#4ade80', label:'OK',     title:'$1k–$2.5k' };
+    return              { fill:'#86efac', label:'GOOD',   title:'$2.5k+' };
+  }
+
+  var html = '<div style="font-family:var(--mono);padding:4px 0;">';
+
+  // Legend
+  html += '<div style="display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;">';
+  [{fill:'#f87171',label:'Negative'},{fill:'#fbbf24',label:'< $500'},
+   {fill:'#d97706',label:'< $1k'},{fill:'#4ade80',label:'< $2.5k'},{fill:'#86efac',label:'$2.5k+'}
+  ].forEach(function(t) {
+    html += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim);">' +
+      '<div style="width:12px;height:12px;border-radius:2px;background:'+t.fill+';"></div>' + t.label + '</div>';
+  });
+  html += '</div>';
+
+  // Single horizontal timeline strip
+  html += '<div style="display:flex;width:100%;height:20px;border-radius:3px;overflow:hidden;gap:1px;margin-bottom:10px;">';
+  display.forEach(function(d) {
+    var t = tierFor(d.end);
+    var hasVac = d.p.bills && d.p.bills.some(function(b){ return b.tag==='vacation'; });
+    var isActive = d.p.active;
+    var tooltip = fmtDs(d.p.startDate) + ' – ' + fmtDs(d.p.endDate) + ' · ' + fmtD(d.end) + (hasVac ? ' ✈' : '');
+    html += '<div data-pid="'+d.p.id+'" onclick="jumpToPeriod(event,this.dataset.pid)" title="'+tooltip+'" style="'+
+      'flex:1;min-width:0;background:'+t.fill+';opacity:'+(isActive?'1':'0.75')+';cursor:pointer;position:relative;'+
+      (isActive?'box-shadow:inset 0 0 0 2px #fff;':'')+
+      (hasVac?'background:repeating-linear-gradient(45deg,'+t.fill+','+t.fill+' 4px,rgba(96,165,250,.4) 4px,rgba(96,165,250,.4) 8px);':'')+
+      '"></div>';
+  });
+  html += '</div>';
+
+  // Date markers below — just a few key ones
+  html += '<div style="display:flex;width:100%;font-size:10px;color:var(--text-dim);margin-bottom:16px;position:relative;height:12px;">';
+  display.forEach(function(d, idx) {
+    // Only label every ~6th period or key ones
+    if (idx % 6 === 0 || d.p.active) {
+      var leftPct = (idx / display.length * 100).toFixed(1);
+      html += '<div style="position:absolute;left:'+leftPct+'%;transform:translateX(-50%);">'+
+        d.p.startDate.slice(5).replace('-','/')+'</div>';
+    }
+  });
+  html += '</div>';
+
+  // Hover detail area
+  html += '<div id="viz-detail" style="min-height:40px;font-size:13px;color:var(--text-dim);padding:8px 12px;background:var(--surface);border-radius:4px;border:1px solid var(--border);">' +
+    'Hover a segment to see details · Click to jump to that period' +
+  '</div>';
+
+
+
+  // Summary counts
+  var neg  = display.filter(function(d){ return d.end < 0; }).length;
+  var warn = display.filter(function(d){ return d.end >= 0 && d.end < 500; }).length;
+  var low  = display.filter(function(d){ return d.end >= 500 && d.end < 1000; }).length;
+  var ok   = display.filter(function(d){ return d.end >= 1000; }).length;
+
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;">';
+  if (neg)  html += '<div style="font-size:12px;color:#f87171;">'+neg+' negative</div>';
+  if (warn) html += '<div style="font-size:12px;color:#fbbf24;">'+warn+' under $500</div>';
+  if (low)  html += '<div style="font-size:12px;color:#d97706;">'+low+' under $1k</div>';
+  if (ok)   html += '<div style="font-size:12px;color:#4ade80;">'+ok+' healthy</div>';
+  html += '</div>';
+
+  html += '</div>';
+  el.innerHTML = html;
+
+  // Wire up mouseover after render
+  var segs = el.querySelectorAll('[data-pid]');
+  var detail = document.getElementById('viz-detail');
+  segs.forEach(function(seg) {
+    seg.addEventListener('mouseover', function() {
+      var pid = seg.dataset.pid;
+      var found = null;
+      display.forEach(function(d){ if (d.p.id === pid) found = d; });
+      if (!found || !detail) return;
+      var t = tierFor(found.end);
+      var hasVac = found.p.bills && found.p.bills.some(function(b){ return b.tag==='vacation'; });
+      detail.innerHTML =
+        '<span style="color:'+t.fill+';font-weight:600;">'+fmtDs(found.p.startDate)+' – '+fmtDs(found.p.endDate)+'</span>' +
+        ' &nbsp;·&nbsp; End: <span style="color:'+t.fill+';font-weight:600;">'+fmtD(found.end)+'</span>' +
+        (hasVac ? ' &nbsp;<span style="color:rgba(96,165,250,.8);">✈ trip period</span>' : '') +
+        ' &nbsp;·&nbsp; <span style="opacity:.6;">click to open</span>';
+    });
+    seg.addEventListener('mouseout', function() {
+      if (detail) detail.innerHTML = 'Hover a segment to see details · Click to jump to that period';
+    });
+  });
+}
+
+loadStorage();
+render();
+
+// ═══ IMPORT (restore from exported JSON) ═══
+function importData(){
+  var inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json';
+  inp.onchange=function(){
+    var f=inp.files[0];if(!f)return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var d=JSON.parse(r.result);
+        if(!confirm('Import "'+f.name+'"? This replaces the data currently in Heath on this device'+(SYNC.ref?' and in the cloud':'')+'.'))return;
+        if(d.balance!==undefined)S.balance=d.balance;
+        if(d.templates)S.templates=d.templates;
+        if(d.periods)S.periods=d.periods;
+        if(d.dc)DC.cards=d.dc;
+        persist();dcPersist();render();
+        alert('Import complete.');
+      }catch(e){alert('Import failed: '+e.message);}
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+
+// ═══ CLOUD SYNC (Firebase Realtime Database) ═══
+var SYNC={cfg:null,code:null,ref:null,clientId:uid()+uid(),status:'off',applying:false,localStamp:0,debounce:null};
+
+function syncLoadSettings(){
+  try{var r=localStorage.getItem('heath_sync');if(r){var d=JSON.parse(r);SYNC.cfg=d.cfg||null;SYNC.code=d.code||null;}}catch(e){}
+  try{SYNC.localStamp=parseInt(localStorage.getItem('heath_sync_stamp'))||0;}catch(e){}
+}
+function syncSetStatus(s,msg){
+  SYNC.status=s;
+  var el=document.getElementById('sync-dot');if(!el)return;
+  var map={
+    off:['var(--text-dim)','Sync off — click to set up'],
+    connecting:['var(--amber)','Syncing…'],
+    synced:['var(--green)','Synced ✓'],
+    error:['var(--red)','Sync problem: '+(msg||'check settings / connection')]
+  };
+  var m=map[s]||map.off;
+  el.style.background=m[0];el.title=m[1];
+}
+function syncApplyRemote(v){
+  SYNC.applying=true;
+  try{
+    if(v.balance!==undefined)S.balance=v.balance;
+    S.templates=v.templates||[];
+    S.periods=(v.periods||[]).map(function(p){if(!p.bills)p.bills=[];if(!p.additionalIncome)p.additionalIncome=[];return p;});
+    DC.cards=v.dc||[];
+    SYNC.localStamp=v.updatedAt||Date.now();
+    localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods}));
+    localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards}));
+    render();
+  }finally{SYNC.applying=false;}
+}
+function syncPushNow(){
+  if(!SYNC.ref)return;
+  SYNC.localStamp=Date.now();
+  localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
+  var payload=JSON.parse(JSON.stringify({updatedAt:SYNC.localStamp,clientId:SYNC.clientId,balance:S.balance,templates:S.templates,periods:S.periods,dc:DC.cards}));
+  SYNC.ref.set(payload).then(function(){syncSetStatus('synced');}).catch(function(e){syncSetStatus('error',e.message);});
+}
+function syncQueuePush(){
+  if(!SYNC.ref||SYNC.applying)return;
+  syncSetStatus('connecting');
+  clearTimeout(SYNC.debounce);
+  SYNC.debounce=setTimeout(syncPushNow,700);
+}
+function syncInit(){
+  if(!SYNC.cfg||!SYNC.code){syncSetStatus('off');return;}
+  if(typeof firebase==='undefined'){syncSetStatus('error','Firebase SDK didn\'t load (offline?) — changes are saved locally and will need a reload to sync');return;}
+  try{
+    if(!firebase.apps.length)firebase.initializeApp(SYNC.cfg);
+    if(SYNC.ref)SYNC.ref.off();
+    SYNC.ref=firebase.database().ref('ledgers/'+SYNC.code);
+    syncSetStatus('connecting');
+    SYNC.ref.on('value',function(snap){
+      var v=snap.val();
+      if(v===null){syncPushNow();return;} // cloud empty — seed it with this device's data
+      if(v.clientId===SYNC.clientId&&(v.updatedAt||0)<=SYNC.localStamp){syncSetStatus('synced');return;} // echo of our own write
+      if((v.updatedAt||0)>SYNC.localStamp){syncApplyRemote(v);}
+      else if((v.updatedAt||0)<SYNC.localStamp){syncPushNow();return;}
+      syncSetStatus('synced');
+    },function(err){syncSetStatus('error',err.message);});
+  }catch(e){syncSetStatus('error',e.message);}
+}
+function syncGenCode(){
+  var chars='abcdefghjkmnpqrstuvwxyz23456789';var out='';
+  var arr=new Uint32Array(24);crypto.getRandomValues(arr);
+  for(var i=0;i<24;i++)out+=chars[arr[i]%chars.length];
+  document.getElementById('sy-code').value=out;
+}
+function parseFbConfig(txt){
+  var keys=['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'];
+  var cfg={};
+  keys.forEach(function(k){
+    var m=txt.match(new RegExp(k+'\\s*[:=]\\s*["\']([^"\']+)["\']'));
+    if(m)cfg[k]=m[1];
+  });
+  return cfg;
+}
+function openSyncModal(){
+  var cfgTxt=SYNC.cfg?JSON.stringify(SYNC.cfg,null,2):'';
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal"><h2>☁ Cloud Sync</h2>'+
+      '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6;">Paste your Firebase config below and pick a sync code. Use the <b style="color:var(--text-mid);">same sync code on every device</b> — the code is the key to your data, so keep it long and private. Anyone who has it can see and edit your ledger.</div>'+
+      '<span class="m-lbl">Firebase config (paste the whole snippet from the Firebase console)</span>'+
+      '<textarea class="m-input" id="sy-cfg" rows="6" placeholder="const firebaseConfig = { apiKey: \'...\', databaseURL: \'...\', ... };" style="font-family:var(--mono);font-size:12px;resize:vertical;">'+esc(cfgTxt)+'</textarea>'+
+      '<span class="m-lbl">Database URL (only if not included in the config above)</span>'+
+      '<input class="m-input" id="sy-dburl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com" value="">'+
+      '<span class="m-lbl">Sync code (same on all devices)</span>'+
+      '<div style="display:flex;gap:6px;">'+
+        '<input class="m-input" id="sy-code" style="flex:1;" placeholder="long-random-code" value="'+esc(SYNC.code||'')+'">'+
+        '<button class="btn sm" style="align-self:flex-start;margin-top:1px;" onclick="syncGenCode()">🎲 Generate</button>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text-dim);margin:8px 0 4px;">Status: <span style="color:'+(SYNC.status==='synced'?'var(--green)':SYNC.status==='error'?'var(--red)':'var(--text-mid)')+';">'+(SYNC.status==='off'?'not configured':SYNC.status)+'</span></div>'+
+      '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
+        (SYNC.cfg?'<button class="btn danger" onclick="syncDisconnect()">Disconnect</button>':'')+
+        '<div style="flex:1;"></div>'+
+        '<button class="btn" onclick="closeModal()">Close</button>'+
+        '<button class="btn primary" onclick="syncSaveAndConnect()">Save & Connect</button>'+
+      '</div>'+
+    '</div></div>';
+}
+function syncSaveAndConnect(){
+  var txt=document.getElementById('sy-cfg')?.value||'';
+  var cfg=parseFbConfig(txt);
+  var dbUrl=(document.getElementById('sy-dburl')?.value||'').trim();
+  if(dbUrl)cfg.databaseURL=dbUrl;
+  var code=(document.getElementById('sy-code')?.value||'').trim();
+  if(!cfg.apiKey){alert('Couldn\'t find an apiKey in the pasted config. Paste the full firebaseConfig snippet from the Firebase console.');return;}
+  if(!cfg.databaseURL){alert('No databaseURL found. Either create the Realtime Database first (then re-copy the config), or paste the database URL into its field.');return;}
+  if(!code||code.length<8){alert('Sync code must be at least 8 characters — use 🎲 Generate for a strong one.');return;}
+  SYNC.cfg=cfg;SYNC.code=code;
+  localStorage.setItem('heath_sync',JSON.stringify({cfg:SYNC.cfg,code:SYNC.code}));
+  closeModal();
+  syncInit();
+}
+function syncDisconnect(){
+  if(!confirm('Disconnect sync on this device? Cloud data stays put; this device just stops syncing.'))return;
+  if(SYNC.ref)SYNC.ref.off();
+  SYNC.ref=null;SYNC.cfg=null;SYNC.code=null;
+  localStorage.removeItem('heath_sync');
+  syncSetStatus('off');
+  closeModal();
+}
+// Hook sync into every save
+var _origPersist=persist, _origDcPersist=dcPersist;
+persist=function(){_origPersist();syncQueuePush();};
+dcPersist=function(){_origDcPersist();syncQueuePush();};
+// Push any pending changes before the tab closes
+window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
+// Boot sync
+syncLoadSettings();
+syncInit();
+</script>
+</body>
+</html>
