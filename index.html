@@ -1623,10 +1623,20 @@ function importData(){
 }
 
 // ═══ CLOUD SYNC (Firebase Realtime Database) ═══
+var DEFAULT_FB_CONFIG={
+  apiKey:"AIzaSyC_qFRRlSCHHfU16I-y5QvcTesSF0b19fo",
+  authDomain:"heath-19fe4.firebaseapp.com",
+  databaseURL:"https://heath-19fe4-default-rtdb.firebaseio.com",
+  projectId:"heath-19fe4",
+  storageBucket:"heath-19fe4.firebasestorage.app",
+  messagingSenderId:"372731899046",
+  appId:"1:372731899046:web:f4266e7899961288961867"
+};
 var SYNC={cfg:null,code:null,ref:null,clientId:uid()+uid(),status:'off',applying:false,localStamp:0,debounce:null};
 
 function syncLoadSettings(){
   try{var r=localStorage.getItem('heath_sync');if(r){var d=JSON.parse(r);SYNC.cfg=d.cfg||null;SYNC.code=d.code||null;}}catch(e){}
+  if(!SYNC.cfg)SYNC.cfg=DEFAULT_FB_CONFIG; // built in — only the sync code is needed
   try{SYNC.localStamp=parseInt(localStorage.getItem('heath_sync_stamp'))||0;}catch(e){}
 }
 function syncSetStatus(s,msg){
@@ -1711,11 +1721,11 @@ function openSyncModal(){
       '<div class="modal"><h2>☁ Cloud Sync</h2>'+
       '<span class="m-lbl">Household name (optional — shows in the header, e.g. "Smith Family")</span>'+
       '<input class="m-input" id="sy-sub" autocorrect="off" placeholder="Your Family" value="'+esc(S.subtitle||'')+'">'+
-      '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6;">Paste your Firebase config below and pick a sync code. Use the <b style="color:var(--text-mid);">same sync code on every device</b> — the code is the key to your data, so keep it long and private. Anyone who has it can see and edit your ledger.</div>'+
-      '<span class="m-lbl">Firebase config (paste the whole snippet from the Firebase console)</span>'+
-      '<textarea class="m-input" id="sy-cfg" rows="6" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="const firebaseConfig = { apiKey: \'...\', databaseURL: \'...\', ... };" style="font-family:var(--mono);font-size:12px;resize:vertical;">'+esc(cfgTxt)+'</textarea>'+
-      '<span class="m-lbl">Database URL (only if not included in the config above)</span>'+
-      '<input class="m-input" id="sy-dburl" type="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://your-project-default-rtdb.firebaseio.com" value="">'+
+      '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.6;">Just enter your sync code — the connection is built in. Use the <b style="color:var(--text-mid);">same sync code on every device</b> — the code is the key to your data, so keep it long and private. Anyone who has it can see and edit your ledger.</div>'+
+      '<details style="margin-bottom:10px;"><summary style="font-size:11px;color:var(--text-dim);cursor:pointer;">⚙ Advanced — custom Firebase config (built in; only change if you know why)</summary>'+
+      '<textarea class="m-input" id="sy-cfg" rows="6" autocapitalize="none" autocorrect="off" spellcheck="false" style="font-family:var(--mono);font-size:12px;resize:vertical;margin-top:8px;">'+esc(cfgTxt)+'</textarea>'+
+      '<input class="m-input" id="sy-dburl" type="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Database URL (only if not in config)" value="">'+
+      '</details>'+
       '<span class="m-lbl">Sync code (same on all devices)</span>'+
       '<div style="display:flex;gap:6px;">'+
         '<input class="m-input" id="sy-code" style="flex:1;" autocapitalize="none" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="long-random-code" value="'+esc(SYNC.code||'')+'">'+
@@ -1738,9 +1748,8 @@ function syncSaveAndConnect(){
   var cfg=parseFbConfig(txt);
   var dbUrl=(document.getElementById('sy-dburl')?.value||'').trim();
   if(dbUrl)cfg.databaseURL=dbUrl;
+  if(!cfg.apiKey||!cfg.databaseURL)cfg=DEFAULT_FB_CONFIG; // built in — most people only need the code
   var code=(document.getElementById('sy-code')?.value||'').trim().toLowerCase(); // case-insensitive: phones auto-capitalize
-  if(!cfg.apiKey){alert('Couldn\'t find an apiKey in the pasted config. Paste the full firebaseConfig snippet from the Firebase console.');return;}
-  if(!cfg.databaseURL){alert('No databaseURL found. Either create the Realtime Database first (then re-copy the config), or paste the database URL into its field.');return;}
   if(!code||code.length<8){alert('Sync code must be at least 8 characters — use 🎲 Generate for a strong one.');return;}
   if(code!==SYNC.code){
     // Connecting to a (new or different) code: defer to whatever the cloud already has.
@@ -1768,7 +1777,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-03-B";
+var HEATH_BUILD="2026-07-03-C";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
@@ -1790,6 +1799,8 @@ setTimeout(checkForUpdate,4000);
 setInterval(checkForUpdate,15*60*1000);
 document.addEventListener('visibilitychange',function(){if(!document.hidden)checkForUpdate();});
 
+// Offline shell (service worker) — fails silently if sw.js isn't deployed
+if('serviceWorker' in navigator){try{navigator.serviceWorker.register('sw.js');}catch(e){}}
 // Boot sync
 syncLoadSettings();
 syncInit();
