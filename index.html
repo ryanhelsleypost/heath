@@ -98,7 +98,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .period{margin-bottom:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
 .period.active{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim);}
 .period.future{opacity:.78;}
-.period.past{opacity:.12;filter:saturate(0);pointer-events:none;transition:opacity .2s,filter .2s;}
+.period.past{opacity:.5;filter:saturate(.35);transition:opacity .2s,filter .2s;}
+.period.past:hover{opacity:.75;}
 .period.past:hover{opacity:.35;filter:saturate(.3);pointer-events:auto;}
 .period.past .period-hdr{cursor:default;}
 .period-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);cursor:pointer;user-select:none;}
@@ -613,7 +614,14 @@ function renderHeader() {
 function renderPeriods() {
   const bals=getRunningBals();
   const activeIdx=S.periods.findIndex(p=>p.active);
+  const pastCount=activeIdx>0?activeIdx:0;
+  let pastToggle='';
+  if(pastCount>0){
+    pastToggle='<div onclick="S.ui_showPast=!S.ui_showPast;render()" style="cursor:pointer;padding:8px 14px;margin-bottom:10px;border:1px dashed var(--border2);border-radius:6px;font-size:12px;color:var(--text-dim);text-align:center;">'+
+      (S.ui_showPast?'▾ Hide ':'▸ Show ')+pastCount+' past period'+(pastCount!==1?'s':'')+'</div>';
+  }
   const html=S.periods.map(function(p,i){
+    if(!S.ui_showPast&&activeIdx>-1&&i<activeIdx)return ''; // past periods collapsed away
     const isActive=p.active, isFuture=i>activeIdx, isOpen=p.open;
     const startBal=bals[i]!==null?bals[i].start:null;
     const endBal=bals[i]!==null?bals[i].end:null;
@@ -643,7 +651,7 @@ function renderPeriods() {
       '</div>'+
       (isOpen?renderPeriodBody(p,i,startBal):'')+'</div>';
   }).join('');
-  document.getElementById('tab-periods').innerHTML=html;
+  document.getElementById('tab-periods').innerHTML=pastToggle+html;
 }
 
 function renderPeriodBody(p,periodIdx,startBal) {
