@@ -734,6 +734,10 @@ function renderPeriodBody(p,periodIdx,startBal) {
           '<button class="btn sm" onclick="S.ui_addBill=null;render()">✕</button>'+
         '</div>'+
       '</div>'+
+      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+        '<input type="checkbox" id="ab-rec-'+p.id+'" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer;">'+
+        '<span>↻ Recurring bill <span style="color:var(--text-dim);font-size:11px;">(adds to this + all future periods matching the due day, and saves as a template)</span></span>'+
+      '</label>'+
     '</div>';
   }
 
@@ -1018,7 +1022,30 @@ function saveAddBill(pid){
   const amt=parseFloat(document.getElementById('ab-amt-'+pid)?.value)||0;
   const dayEl=document.getElementById('ab-day-'+pid);
   const day=dayEl&&dayEl.value.trim()?parseInt(dayEl.value):null;
+  const recurring=!!document.getElementById('ab-rec-'+pid)?.checked;
   if(!name)return;
+  if(recurring){
+    // Create a template and place the bill in this + every future period where the due day fits
+    const tplId=uid();
+    S.templates.push({id:tplId,name:name,day:day,amount:amt,active:true,category:'fixed'});
+    const pi=S.periods.findIndex(pp=>pp.id===pid);
+    let placedHere=false,firstPlaced=null,count=0;
+    S.periods.forEach((fp,fi)=>{
+      if(fi<pi)return;
+      if(!billDueInPeriod(day,fp.startDate,fp.endDate))return;
+      fp.bills.push({id:uid(),templateId:tplId,name:name,amount:amt,day:day,status:'upcoming',category:'fixed',tag:''});
+      fp.bills.sort((a,b)=>(a.day||99)-(b.day||99));
+      count++;
+      if(fi===pi)placedHere=true;
+      if(!firstPlaced)firstPlaced=fp;
+    });
+    S.ui_addBill=null;
+    persist();render();
+    if(!placedHere&&firstPlaced){
+      alert('"'+name+'" is recurring, but day '+day+' doesn\'t fall in this pay period — its first occurrence starts in '+fmtDs(firstPlaced.startDate)+' – '+fmtDs(firstPlaced.endDate)+'. Added to '+count+' periods total.');
+    }
+    return;
+  }
   p.bills.push({id:uid(),templateId:null,name,amount:amt,day,status:'upcoming',category:'fixed',tag:''});
   p.bills.sort((a,b)=>(a.day||99)-(b.day||99));
   S.ui_addBill=null;
