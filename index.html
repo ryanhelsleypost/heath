@@ -258,8 +258,16 @@ function buildStatDropdown(type, periodIdxs) {
   }).join('');
   var wrap = document.createElement('div');
   wrap.addEventListener('click', function(e){ e.stopPropagation(); });
-  wrap.style.cssText = 'position:absolute;top:100%;left:0;z-index:200;margin-top:6px;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px;min-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.5);';
+  wrap.style.cssText = 'position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px;min-width:260px;max-width:calc(100vw - 16px);max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);';
   wrap.innerHTML = '<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);padding:2px 4px 8px;">↓ Click to jump</div>' + items;
+  // Anchor below the host stat once in the DOM — fixed positioning escapes the
+  // stats row's horizontal-scroll clipping on mobile.
+  requestAnimationFrame(function(){
+    var host=wrap.parentElement;if(!host)return;
+    var r=host.getBoundingClientRect();
+    wrap.style.top=(r.bottom+6)+'px';
+    wrap.style.left=Math.max(8,Math.min(r.left,window.innerWidth-wrap.offsetWidth-8))+'px';
+  });
   return wrap;
 }
 function toggleStatDropdown(type) {
@@ -1182,6 +1190,7 @@ function renderModal(){
             '<button class="btn" onclick="importData()">↑ Import</button>'+
             '<button class="btn" onclick="exportData()">↓ Export</button>'+
           '</div>'+
+          '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">build '+HEATH_BUILD+'</div>'+
         '</div>'+
         '<div class="m-actions">'+
           '<button class="btn" onclick="closeManage()">Close</button>'+
@@ -1757,6 +1766,30 @@ persist=function(){_origPersist();syncQueuePush();};
 dcPersist=function(){_origDcPersist();syncQueuePush();};
 // Push any pending changes before the tab closes
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
+
+// ═══ SELF-UPDATE CHECK ═══
+var HEATH_BUILD="2026-07-03-B";
+function checkForUpdate(){
+  try{
+    fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
+      var m=txt.match(/HEATH_BUILD="([^"]+)"/);
+      if(m&&m[1]!==HEATH_BUILD)showUpdateBanner();
+    }).catch(function(){});
+  }catch(e){}
+}
+function showUpdateBanner(){
+  if(document.getElementById('upd-banner'))return;
+  var d=document.createElement('div');
+  d.id='upd-banner';
+  d.style.cssText='position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--green);color:#08140a;padding:11px 20px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.55);font-family:var(--mono);';
+  d.textContent='↻ Update available — tap to refresh';
+  d.onclick=function(){location.href=location.pathname+'?v='+Date.now();};
+  document.body.appendChild(d);
+}
+setTimeout(checkForUpdate,4000);
+setInterval(checkForUpdate,15*60*1000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden)checkForUpdate();});
+
 // Boot sync
 syncLoadSettings();
 syncInit();
