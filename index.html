@@ -198,10 +198,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
     </div>
     <div id="hdr-stats" class="hdr-stats"></div>
     <div class="hdr-actions">
-      <button class="btn" onclick="openSyncModal()">☁ Sync</button>
-      <button class="btn" onclick="openManage()">⚙ Bills</button>
-      <button class="btn" onclick="importData()">↑ Import</button>
-      <button class="btn primary" onclick="exportData()">↓ Export</button>
+      <button class="btn" onclick="openManage()" title="Settings — bills, sync, import/export">⚙</button>
     </div>
   </div>
   <div id="timeline-strip-wrap"></div>
@@ -533,7 +530,10 @@ function renderTimeline() {
 
 function renderHeader() {
   const projEnd=activeEndBal();
-  const diff=projEnd!==null?projEnd-S.balance:0;
+  // Period Δ = whole-period plan: ALL income minus ALL bills for the active period,
+  // regardless of received/cleared status — so checking things off never moves it.
+  const _ap=S.periods.find(pp=>pp.active);
+  const diff=_ap?(( _ap.income||0)+(_ap.additionalIncome||[]).reduce((s,a)=>s+(a.amount||0),0)-_ap.bills.reduce((s,b)=>s+(b.amount||0),0)):0;
   document.getElementById('bal-display').textContent='$'+S.balance.toLocaleString('en-US',{maximumFractionDigits:0});
   const bals=getRunningBals();
   let negCount=0,warnCount=0,tightCount=0;
@@ -569,7 +569,7 @@ function renderHeader() {
   var sideEl = document.getElementById('bal-side');
   if (sideEl) {
     sideEl.innerHTML =
-      '<div class="stat" title="Projected change in your balance between now and the end of the current pay period (remaining income minus remaining bills)."><div class="stat-lbl">Period Δ</div><div class="stat-val '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+fmtD(diff)+'</div></div>'+
+      '<div class="stat" title="Whole-period surplus or deficit: all income this period minus all bills, regardless of what\'s been received or cleared. Checking things off never moves this number."><div class="stat-lbl">Period Δ</div><div class="stat-val '+(diff>=0?'pos':'neg')+'">'+(diff>=0?'+':'−')+fmtD(diff)+'</div></div>'+
       '<div class="stat" title="Where your balance is projected to land at the end of the current pay period."><div class="stat-lbl">Period End</div><div class="stat-val '+(projEnd>=0?'pos':'neg')+'">'+fmtD(projEnd)+'</div></div>';
   }
   // Negative periods stat
@@ -734,10 +734,18 @@ function renderPeriodBody(p,periodIdx,startBal) {
           '<button class="btn sm" onclick="S.ui_addBill=null;render()">✕</button>'+
         '</div>'+
       '</div>'+
-      '<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+      '<div style="margin-top:8px;"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">LINK / URL (OPTIONAL)</div>'+
+        '<input class="add-input" id="ab-url-'+p.id+'" type="url" placeholder="https://…" style="width:100%;" onkeydown="if(event.key===\'Enter\')saveAddBill(\''+p.id+'\')"></div>'+
+      '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;">'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
         '<input type="checkbox" id="ab-rec-'+p.id+'" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer;">'+
-        '<span>↻ Recurring bill <span style="color:var(--text-dim);font-size:11px;">(adds to this + all future periods matching the due day, and saves as a template)</span></span>'+
+        '<span>↻ Recurring <span style="color:var(--text-dim);font-size:11px;">(this + all future periods)</span></span>'+
       '</label>'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+        '<input type="checkbox" id="ab-ap-'+p.id+'" style="accent-color:var(--amber);width:15px;height:15px;cursor:pointer;">'+
+        '<span>⚡ Autopay <span style="color:var(--text-dim);font-size:11px;">(starts as Pending)</span></span>'+
+      '</label>'+
+      '</div>'+
     '</div>';
   }
 
@@ -1023,17 +1031,21 @@ function saveAddBill(pid){
   const dayEl=document.getElementById('ab-day-'+pid);
   const day=dayEl&&dayEl.value.trim()?parseInt(dayEl.value):null;
   const recurring=!!document.getElementById('ab-rec-'+pid)?.checked;
+  const ap=!!document.getElementById('ab-ap-'+pid)?.checked;
+  let u=(document.getElementById('ab-url-'+pid)?.value||'').trim();
+  if(u&&!/^https?:\/\//i.test(u))u='https://'+u;
+  const st=ap?'pending':'upcoming';
   if(!name)return;
   if(recurring){
     // Create a template and place the bill in this + every future period where the due day fits
     const tplId=uid();
-    S.templates.push({id:tplId,name:name,day:day,amount:amt,active:true,category:'fixed'});
+    S.templates.push({id:tplId,name:name,day:day,amount:amt,active:true,category:'fixed',url:u,autopay:ap});
     const pi=S.periods.findIndex(pp=>pp.id===pid);
     let placedHere=false,firstPlaced=null,count=0;
     S.periods.forEach((fp,fi)=>{
       if(fi<pi)return;
       if(!billDueInPeriod(day,fp.startDate,fp.endDate))return;
-      fp.bills.push({id:uid(),templateId:tplId,name:name,amount:amt,day:day,status:'upcoming',category:'fixed',tag:''});
+      fp.bills.push({id:uid(),templateId:tplId,name:name,amount:amt,day:day,status:st,category:'fixed',tag:'',url:u,autopay:ap});
       fp.bills.sort((a,b)=>(a.day||99)-(b.day||99));
       count++;
       if(fi===pi)placedHere=true;
@@ -1046,7 +1058,7 @@ function saveAddBill(pid){
     }
     return;
   }
-  p.bills.push({id:uid(),templateId:null,name,amount:amt,day,status:'upcoming',category:'fixed',tag:''});
+  p.bills.push({id:uid(),templateId:null,name,amount:amt,day,status:st,category:'fixed',tag:'',url:u,autopay:ap});
   p.bills.sort((a,b)=>(a.day||99)-(b.day||99));
   S.ui_addBill=null;
   persist();render();
@@ -1146,12 +1158,21 @@ function renderModal(){
   document.getElementById('modal-root').innerHTML=
     '<div class="modal-backdrop" onclick="if(event.target===this)closeManage()">'+
       '<div class="modal">'+
-        '<h2>Recurring Bills</h2>'+
+        '<h2>⚙ Settings</h2>'+
+        '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Recurring Bills</div>'+
         '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Changes apply to future periods via Rebuild.</div>'+
         '<div style="display:grid;grid-template-columns:1fr 55px 85px 32px;gap:8px;padding:0 0 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;"><span>Name</span><span>Day</span><span>Amount</span><span></span></div>'+
         rows+
         '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'+
           '<input class="m-input" id="new-tpl" placeholder="New bill  |  name : amount : day" onkeydown="if(event.key===\'Enter\')addTpl(this.value)">'+
+        '</div>'+
+        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Data &amp; Sync</div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+            '<button class="btn" onclick="openSyncModal()">☁ Sync settings</button>'+
+            '<button class="btn" onclick="importData()">↑ Import</button>'+
+            '<button class="btn" onclick="exportData()">↓ Export</button>'+
+          '</div>'+
         '</div>'+
         '<div class="m-actions">'+
           '<button class="btn" onclick="closeManage()">Close</button>'+
@@ -1665,6 +1686,7 @@ function parseFbConfig(txt){
   return cfg;
 }
 function openSyncModal(){
+  S.ui_manage=false; // may be opened from inside Settings — don't let a re-render bring Settings back over us
   var cfgTxt=SYNC.cfg?JSON.stringify(SYNC.cfg,null,2):'';
   document.getElementById('modal-root').innerHTML=
     '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
