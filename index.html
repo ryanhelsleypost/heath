@@ -70,11 +70,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
   .bal-input{width:140px;}
   .bal-side{margin-left:8px;padding-left:10px;gap:3px;}
   .bal-side .stat-val{font-size:13px;}
-  .hdr-stats{gap:12px;margin-top:8px;}
+  .hdr-stats{gap:14px;margin-top:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;width:100%;}
+  .hdr-stats .stat{flex-shrink:0;}
   .stat-val{font-size:14px;}
-  .stat-lbl{font-size:10px;}
-  .hdr-actions{width:100%;padding-top:8px;gap:6px;}
-  .hdr-actions .btn{flex:1;text-align:center;padding:9px 4px;}
+  .stat-lbl{font-size:10px;white-space:nowrap;}
+  .hdr-actions{position:absolute;top:8px;right:10px;padding:0;width:auto;}
+  .hdr-actions .btn{flex:none;padding:7px 12px;font-size:14px;}
   .main-wrap{padding:12px 8px 80px;}
   .tab-bar{width:100%;}
   .tab-btn{flex:1;padding:10px 8px;}
@@ -573,21 +574,21 @@ function renderHeader() {
       '<div class="stat" title="Where your balance is projected to land at the end of the current pay period."><div class="stat-lbl">Period End</div><div class="stat-val '+(projEnd>=0?'pos':'neg')+'">'+fmtD(projEnd)+'</div></div>';
   }
   // Negative periods stat
-  var negStat = makeStat('END BALANCE < $0', negCount+' period'+(negCount!==1?'s':'')+(negCount>0?' ▾':''), negCount>0?'neg':'pos', negCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('neg');}:null, 'Click to see affected periods');
+  var negStat = makeStat('< $0', negCount+' period'+(negCount!==1?'s':'')+(negCount>0?' ▾':''), negCount>0?'neg':'pos', negCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('neg');}:null, 'Periods projected to end below $0 — click to see them');
   if (negCount>0) {
     var negDrop = buildStatDropdown('neg', negPeriods);
     if (negDrop) negStat.appendChild(negDrop);
   }
   statsEl.appendChild(negStat);
   // Warning periods stat
-  var warnStat = makeStat('END BALANCE < $500', warnCount+' period'+(warnCount!==1?'s':'')+(warnCount>0?' ▾':''), warnCount>0?'amber':'pos', warnCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('warn');}:null, 'Click to see affected periods');
+  var warnStat = makeStat('< $500', warnCount+' period'+(warnCount!==1?'s':'')+(warnCount>0?' ▾':''), warnCount>0?'amber':'pos', warnCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('warn');}:null, 'Periods projected to end below $500 — click to see them');
   if (warnCount>0) {
     var warnDrop = buildStatDropdown('warn', warnPeriods);
     if (warnDrop) warnStat.appendChild(warnDrop);
   }
   statsEl.appendChild(warnStat);
   // Tight periods stat ($500–$999)
-  var tightStat = makeStat('END BALANCE < $1K', tightCount+' period'+(tightCount!==1?'s':'')+(tightCount>0?' ▾':''), tightCount>0?'amber':'pos', tightCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('tight');}:null, 'Click to see affected periods');
+  var tightStat = makeStat('< $1K', tightCount+' period'+(tightCount!==1?'s':'')+(tightCount>0?' ▾':''), tightCount>0?'amber':'pos', tightCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('tight');}:null, 'Periods projected to end below $1,000 — click to see them');
   if (tightCount>0) {
     var tightDrop = buildStatDropdown('tight', tightPeriods);
     if (tightDrop) tightStat.appendChild(tightDrop);
@@ -1633,7 +1634,7 @@ function syncApplyRemote(v){
     S.subtitle=v.subtitle||'';
     SYNC.localStamp=v.updatedAt||Date.now();
     localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods}));
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||''}));
     localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards}));
     render();
   }finally{SYNC.applying=false;}
