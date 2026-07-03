@@ -1586,7 +1586,8 @@ function parseFbConfig(txt){
   var keys=['apiKey','authDomain','databaseURL','projectId','storageBucket','messagingSenderId','appId'];
   var cfg={};
   keys.forEach(function(k){
-    var m=txt.match(new RegExp(k+'\\s*[:=]\\s*["\']([^"\']+)["\']'));
+    // accept both  apiKey: "..."  and  "apiKey": "..."  styles
+    var m=txt.match(new RegExp('["\']?'+k+'["\']?\\s*[:=]\\s*["\']([^"\']+)["\']'));
     if(m)cfg[k]=m[1];
   });
   return cfg;
