@@ -810,7 +810,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
 
   html += '</div>';
   html+='<div class="period-footer">'+
-    (p.active?'<button class="btn sm primary" onclick="advancePeriod()" title="Move to next period">→ Advance to Next</button>':'<button class="btn sm" onclick="setActivePeriod(\''+p.id+'\')" title="Mark this as your active pay period">Set as Current</button>')+
+    (p.active?'<button class="btn sm '+(S.ui_armAdvance?'danger':'primary')+'" onclick="advancePeriod()" title="Settles this period: clears remaining bills into the balance and moves to the next">'+(S.ui_armAdvance?'⚠ Tap again — settles & clears this period':'→ Advance to Next')+'</button>':'<button class="btn sm" onclick="setActivePeriod(\''+p.id+'\')" title="Mark this as your active pay period">Set as Current</button>')+
     '<div style="flex:1;"></div>'+
     '<button class="btn sm danger" onclick="if(confirm(\'Remove period?\'))delPeriod(\''+p.id+'\')" style="opacity:.5;">del</button>'+
   '</div>';
@@ -1151,7 +1151,12 @@ function delPeriod(id){S.periods=S.periods.filter(p=>p.id!==id);persist();render
 function advancePeriod(){
   const ai=S.periods.findIndex(p=>p.active);
   if(ai===-1||ai>=S.periods.length-1)return;
-  if(!confirm('Advance to next period? Balance will update to projected end.'))return;
+  if(S.ui_armAdvance!==true){ // press-again: Chrome suppresses confirm() dialogs unpredictably
+    S.ui_armAdvance=true;render();
+    setTimeout(function(){if(S.ui_armAdvance){S.ui_armAdvance=false;render();}},4000);
+    return;
+  }
+  S.ui_armAdvance=false;
   const p=S.periods[ai];
   // Settle: add only non-cleared income (cleared was already manually folded in), subtract non-cleared bills
   S.balance=Math.round(S.balance+periodIncomeTotal(p)-periodBillsTotal(p));
@@ -1677,8 +1682,12 @@ function syncQueuePush(){
   if(!SYNC.ref||SYNC.applying)return;
   syncSetStatus('connecting');
   clearTimeout(SYNC.debounce);
-  SYNC.debounce=setTimeout(syncPushNow,700);
+  var wait=(SYNC.resumeHold&&Date.now()-SYNC.resumeHold<4000)?(4000-(Date.now()-SYNC.resumeHold)+300):700;
+  SYNC.debounce=setTimeout(syncPushNow,wait);
 }
+document.addEventListener('visibilitychange',function(){
+  if(!document.hidden){SYNC.resumeHold=Date.now();}
+});
 function syncInit(){
   if(!SYNC.cfg||!SYNC.code){syncSetStatus('off');return;}
   if(typeof firebase==='undefined'){syncSetStatus('error','Firebase SDK didn\'t load (offline?) — changes are saved locally and will need a reload to sync');return;}
@@ -1690,6 +1699,7 @@ function syncInit(){
     SYNC.ref.on('value',function(snap){
       var v=snap.val();
       if(v===null){syncPushNow();return;} // cloud empty — seed it with this device's data
+      SYNC.resumeHold=null; // fresh snapshot received — safe to push
       if(v.clientId===SYNC.clientId&&(v.updatedAt||0)<=SYNC.localStamp){syncSetStatus('synced');return;} // echo of our own write
       if((v.updatedAt||0)>SYNC.localStamp){syncApplyRemote(v);}
       else if((v.updatedAt||0)<SYNC.localStamp){syncPushNow();return;}
@@ -1777,7 +1787,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-03-C";
+var HEATH_BUILD="2026-07-03-D";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
