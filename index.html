@@ -225,7 +225,17 @@ const DC_KEY = 'ledger_dc_v1';
 // ═══ SEED DATA — intentionally empty ═══
 // The public app starts fully zeroed. All real data lives in each
 // user's own browser storage and (if configured) their cloud sync.
-const DEFAULT_TEMPLATES = [];
+const DEFAULT_TEMPLATES = [
+  {id:'t-rent',     name:'Rent/Mortgage',    amount:0,    day:1,  category:'housing',    autopay:false, url:''},
+  {id:'t-electric', name:'Electric',         amount:0,    day:15, category:'utilities',  autopay:false, url:''},
+  {id:'t-water',    name:'Water',            amount:0,    day:15, category:'utilities',  autopay:false, url:''},
+  {id:'t-internet', name:'Internet',         amount:0,    day:10, category:'utilities',  autopay:true,  url:''},
+  {id:'t-phone',    name:'Phone',            amount:0,    day:10, category:'utilities',  autopay:true,  url:''},
+  {id:'t-grocer',   name:'Groceries',        amount:0,    day:1,  category:'food',       autopay:false, url:''},
+  {id:'t-gas',      name:'Gas/Fuel',         amount:0,    day:1,  category:'transport',  autopay:false, url:''},
+  {id:'t-insure',   name:'Insurance',        amount:0,    day:1,  category:'insurance',  autopay:true,  url:''},
+  {id:'t-stream',   name:'Streaming',        amount:0,    day:1,  category:'subscriptions', autopay:true, url:''},
+];
 
 // ═══ STATE ═══
 let S = {balance:0, templates:DEFAULT_TEMPLATES.map(t=>({...t})), periods:[]};
@@ -1788,11 +1798,11 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-03-F";
+var HEATH_BUILD="2026-07-03-G";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
-      var m=txt.match(/HEATH_BUILD="2026-07-03-F"]+)"/);
+      var m=txt.match(/HEATH_BUILD="([^"]+)"/);
       if(m&&m[1]!==HEATH_BUILD)showUpdateBanner();
     }).catch(function(){});
   }catch(e){}
