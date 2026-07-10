@@ -211,11 +211,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-btn-periods" onclick="setTab('periods')">Pay Periods</button>
     <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
+    <button class="tab-btn" id="tab-btn-piggy" onclick="setTab('piggy')">🐷 Piggy Bank</button>
   </div>
   <div id="tab-periods"></div>
   <div id="tab-debt" style="display:none"></div>
+  <div id="tab-piggy" style="display:none"></div>
 </div>
 <div id="modal-root"></div>
+<div id="wizard-root"></div>
 
 <script>
 const STORAGE_KEY = 'ledger_v2';
@@ -238,7 +241,9 @@ const DEFAULT_TEMPLATES = [
 ];
 
 // ═══ STATE ═══
-let S = {balance:0, templates:DEFAULT_TEMPLATES.map(t=>({...t})), periods:[]};
+let S = {balance:0, templates:DEFAULT_TEMPLATES.map(t=>({...t})), periods:[],
+  settings:{periodLength:14, anchorDate:null, setupComplete:false},
+  incomes:[], piggies:[]};
 let DC = {cards:[], tab:'periods'};
 
 function uid() { return Math.random().toString(36).slice(2,9); }
@@ -331,8 +336,49 @@ function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
 function fmtDate(d){return d.toISOString().split('T')[0];}
 
 function periodAddlTotal(p) { return (p.additionalIncome||[]).reduce((s,a)=>s+(a.status==='cleared'?0:a.amount),0); }
-function periodIncomeTotal(p) { return (p.incomeCleared?0:p.income)+periodAddlTotal(p); }
-function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:b.amount),0); }
+// ── THREE-TIER INCOME RESOLUTION ──
+// For each income entry: actual ?? estimate(hours×rate) ?? placeholder
+function incomeSrc(id) { return (S.incomes||[]).find(i=>i.id===id); }
+function effectiveRate(inc) {
+  if (!inc) return 0;
+  const hist = inc.rateHistory||[];
+  if (hist.length >= 2) {
+    const recent = hist.slice(-5);
+    return recent.reduce((s,r)=>s+r,0)/recent.length;
+  }
+  return inc.rate||0;
+}
+// Resolve one entry to {value, tier} — tier: 'actual'|'est'|'placeholder'
+function resolveEntry(e) {
+  const inc = incomeSrc(e.incomeId);
+  if (!inc) return {value:0, tier:'placeholder'};
+  if (e.actual!=null && !isNaN(e.actual)) return {value:e.actual, tier:'actual'};
+  if (inc.type==='hourly') {
+    if (e.hours!=null && !isNaN(e.hours) && e.hours>0) return {value:Math.round(e.hours*effectiveRate(inc)), tier:'est'};
+    return {value:inc.placeholderAvg||0, tier:'placeholder'};
+  }
+  return {value:inc.amount||0, tier:'placeholder'};
+}
+// Sum all income entries for a period (excluding cleared — already in balance)
+function periodEntriesTotal(p) {
+  return (p.incomeEntries||[]).reduce((s,e)=>s+(e.cleared?0:resolveEntry(e).value),0);
+}
+// Legacy fallback: periods without incomeEntries use old p.income
+function periodIncomeTotal(p) {
+  if (p.incomeEntries && p.incomeEntries.length) return periodEntriesTotal(p)+periodAddlTotal(p);
+  return (p.incomeCleared?0:p.income)+periodAddlTotal(p);
+}
+// Piggy contributions for a period (behave like bills)
+function periodPiggyTotal(p) {
+  let sum=0;
+  (S.piggies||[]).forEach(pg=>{
+    if (pg.archived) return;
+    const c=(pg.contributions||[]).find(c=>c.periodId===p.id);
+    if (c && !c.done) sum += c.amount||0;
+  });
+  return sum;
+}
+function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:b.amount),0) + periodPiggyTotal(p); }
 
 function billDueInPeriod(day,s,e) {
   if (day===null) return true;
@@ -446,36 +492,90 @@ function buildBillsForPeriod(p) {
   return bills;
 }
 
-function genPeriods(count) {
+function periodLen() { return (S.settings&&S.settings.periodLength)||14; }
+
+function genPeriods(count, fromDate) {
   const periods = [];
-  let d = new Date(); d.setHours(0,0,0,0);
+  const len = periodLen();
+  let d;
+  if (fromDate) { d = new Date(fromDate+'T00:00:00'); }
+  else if (S.settings&&S.settings.anchorDate) { d = new Date(S.settings.anchorDate+'T00:00:00'); }
+  else { d = new Date(); d.setHours(0,0,0,0); }
   for (let i=0;i<count;i++) {
-    const start = fmtDate(d), end = fmtDate(addDays(d,13));
+    const start = fmtDate(d), end = fmtDate(addDays(d,len-1));
     periods.push({
       id:'p'+start.replace(/-/g,''), startDate:start, endDate:end,
       income: 0,
+      incomeEntries: [],
       additionalIncome: [],
       bills:[], open:i===0, active:i===0,
     });
-    d=addDays(d,14);
+    d=addDays(d,len);
   }
   return periods;
 }
 
+// Default count: 2 years of periods regardless of frequency
+function defaultPeriodCount() { return periodLen()===7 ? 104 : 52; }
+
+// ── Migration: existing installs get a default income source + settings ──
+function migrateToV3() {
+  if (!S.settings) S.settings = {periodLength:14, anchorDate:null, setupComplete:false};
+  if (!S.incomes) S.incomes = [];
+  if (!S.piggies) S.piggies = [];
+  // Existing data with periods but no income sources → they're a legacy install
+  if (S.periods.length && !S.incomes.length) {
+    // Find the most common income amount/name to seed the source
+    const active = S.periods.find(p=>p.active) || S.periods[0];
+    const amt = active ? (active.income||0) : 0;
+    const nm  = active ? (active.incomeName||'Paycheck') : 'Paycheck';
+    S.incomes.push({id:uid(), name:nm, type:'fixed', amount:amt, rate:0, typicalHours:0, placeholderAvg:0, rateHistory:[]});
+    S.settings.setupComplete = true; // don't show wizard to existing users
+    if (!S.settings.anchorDate && S.periods.length) S.settings.anchorDate = S.periods[0].startDate;
+    // Link legacy p.income to the new source via incomeEntries
+    const srcId = S.incomes[0].id;
+    S.periods.forEach(p=>{
+      if (!p.incomeEntries) p.incomeEntries = [];
+      if (!p.incomeEntries.length) {
+        p.incomeEntries.push({incomeId:srcId, hours:null, actual:(p.income||0)!==(amt||0)?(p.income||0):null, cleared:!!p.incomeCleared});
+      }
+    });
+    persist();
+  }
+}
+
 function initPeriods() {
-  S.periods = genPeriods(60);
-  S.periods.forEach(p=>{p.bills=buildBillsForPeriod(p);});
+  S.periods = genPeriods(defaultPeriodCount());
+  S.periods.forEach(p=>{p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
   persist();
 }
 
+// ── Extend periods: append another year to the end ──
+function extendPeriods() {
+  if (!S.periods.length) { initPeriods(); return; }
+  const last = S.periods[S.periods.length-1];
+  const len = periodLen();
+  const nextStart = fmtDate(addDays(new Date(last.endDate+'T00:00:00'),1));
+  const addCount = len===7 ? 52 : 26; // one year
+  const newPs = genPeriods(addCount, nextStart);
+  newPs.forEach(p=>{p.open=false;p.active=false;p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
+  S.periods = S.periods.concat(newPs);
+  persist(); render();
+}
+
+// Build income entries from S.incomes for a period
+function buildIncomeEntriesForPeriod(p) {
+  return (S.incomes||[]).map(inc => ({incomeId:inc.id, hours:null, actual:null, cleared:false}));
+}
+
 // ═══ STORAGE ═══
-function persist() { localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||''})); }
+function persist() { localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies})); }
 function dcPersist() { localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards})); }
 
 function loadStorage() {
   try {
     const r=localStorage.getItem(STORAGE_KEY);
-    if (r) { const d=JSON.parse(r); if(d.balance!==undefined)S.balance=d.balance; if(d.templates)S.templates=d.templates; if(d.periods&&d.periods.length)S.periods=d.periods; if(d.subtitle)S.subtitle=d.subtitle; }
+    if (r) { const d=JSON.parse(r); if(d.balance!==undefined)S.balance=d.balance; if(d.templates)S.templates=d.templates; if(d.periods&&d.periods.length)S.periods=d.periods; if(d.subtitle)S.subtitle=d.subtitle; if(d.settings)S.settings=Object.assign({periodLength:14,anchorDate:null,setupComplete:false},d.settings); if(d.incomes)S.incomes=d.incomes; if(d.piggies)S.piggies=d.piggies; }
   } catch(e) {}
   if (!S.periods.length) initPeriods();
   try {
@@ -505,14 +605,171 @@ function activeEndBal() {
 }
 
 // ═══ RENDER ═══
+// ═══ PIGGY BANK ═══
+// Distribute a goal across periods between now and deadline
+function piggyRecalc(pg) {
+  if (pg.archived) return;
+  const doneAmt = (pg.contributions||[]).filter(c=>c.done).reduce((s,c)=>s+(c.amount||0),0);
+  const remaining = Math.max(0, pg.goal - doneAmt);
+  // Eligible periods: active period onward, ending before deadline
+  const ai = S.periods.findIndex(p=>p.active);
+  const eligible = S.periods.filter((p,i)=>i>=Math.max(0,ai) && p.startDate<=pg.deadline);
+  // Keep done contributions, redistribute remaining across not-done eligible periods
+  const doneContribs = (pg.contributions||[]).filter(c=>c.done);
+  const notDonePeriods = eligible.filter(p=>!doneContribs.find(c=>c.periodId===p.id));
+  const per = notDonePeriods.length>0 ? Math.ceil(remaining/notDonePeriods.length) : 0;
+  pg.contributions = doneContribs.concat(notDonePeriods.map(p=>({periodId:p.id, amount:per, done:false})));
+  if (remaining<=0 && !pg.archived) { pg.complete=true; }
+}
+function piggyRecalcAll() { (S.piggies||[]).forEach(piggyRecalc); }
+
+function piggySaved(pg) { return (pg.contributions||[]).filter(c=>c.done).reduce((s,c)=>s+(c.amount||0),0); }
+
+function togglePiggyContrib(pgId, periodId) {
+  const pg=(S.piggies||[]).find(g=>g.id===pgId); if(!pg)return;
+  const c=(pg.contributions||[]).find(c=>c.periodId===periodId); if(!c)return;
+  c.done=!c.done;
+  if (c.done) { S.balance -= c.amount; } else { S.balance += c.amount; }
+  piggyRecalc(pg);
+  if (piggySaved(pg) >= pg.goal) { pg.complete = true; }
+  persist(); render();
+  if (DC.tab==='piggy') renderPiggy();
+}
+
+function newPiggyModal() {
+  const today = fmtDate(new Date());
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>🐷 New Piggy Bank Goal</h2>'+
+        '<span class="m-lbl">What are you saving for?</span>'+
+        '<input class="m-input" id="pg-name" placeholder="e.g. Disneyland Trip">'+
+        '<span class="m-lbl">Goal amount ($)</span>'+
+        '<input class="m-input" id="pg-goal" type="number" min="1" step="1" placeholder="2400">'+
+        '<span class="m-lbl">Save it by (deadline)</span>'+
+        '<input class="m-input" id="pg-deadline" type="date" min="'+today+'">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" onclick="savePiggy()">Start Saving</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById('pg-name');if(el)el.focus();},50);
+}
+function savePiggy() {
+  const name=(document.getElementById('pg-name')?.value||'').trim();
+  const goal=parseFloat(document.getElementById('pg-goal')?.value);
+  const deadline=document.getElementById('pg-deadline')?.value;
+  if(!name||isNaN(goal)||goal<=0||!deadline){alert('Please fill in all three fields.');return;}
+  const pg={id:uid(), name, goal:Math.round(goal), deadline, contributions:[], archived:false, complete:false, createdAt:Date.now()};
+  if(!S.piggies)S.piggies=[];
+  S.piggies.push(pg);
+  piggyRecalc(pg);
+  persist(); closeModal(); render(); renderPiggy();
+}
+function archivePiggy(id) {
+  const pg=(S.piggies||[]).find(g=>g.id===id); if(!pg)return;
+  pg.archived=true; persist(); renderPiggy(); render();
+}
+function deletePiggy(id) {
+  if(S.ui_armDelPiggy!==id){S.ui_armDelPiggy=id;renderPiggy();setTimeout(function(){if(S.ui_armDelPiggy===id){S.ui_armDelPiggy=null;renderPiggy();}},3500);return;}
+  S.ui_armDelPiggy=null;
+  S.piggies=(S.piggies||[]).filter(g=>g.id!==id);
+  persist(); renderPiggy(); render();
+}
+function extendPiggyModal(id) {
+  const pg=(S.piggies||[]).find(g=>g.id===id); if(!pg)return;
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>Adjust Goal</h2>'+
+        '<span class="m-lbl">Goal amount ($)</span>'+
+        '<input class="m-input" id="pgx-goal" type="number" min="1" step="1" value="'+pg.goal+'">'+
+        '<span class="m-lbl">New deadline</span>'+
+        '<input class="m-input" id="pgx-deadline" type="date" value="'+pg.deadline+'">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-id="'+id+'" onclick="saveExtendPiggy(this.dataset.id)">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+function saveExtendPiggy(id) {
+  const pg=(S.piggies||[]).find(g=>g.id===id); if(!pg)return;
+  const g=parseFloat(document.getElementById('pgx-goal')?.value);
+  const d=document.getElementById('pgx-deadline')?.value;
+  if(!isNaN(g)&&g>0)pg.goal=Math.round(g);
+  if(d)pg.deadline=d;
+  pg.complete=false;
+  piggyRecalc(pg);
+  persist(); closeModal(); renderPiggy(); render();
+}
+
+function renderPiggy() {
+  const root=document.getElementById('tab-piggy'); if(!root)return;
+  const active=(S.piggies||[]).filter(g=>!g.archived);
+  const archived=(S.piggies||[]).filter(g=>g.archived);
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 12px;">'+
+    '<div style="font-size:14px;color:var(--text-dim);">Save toward goals — contributions appear in each pay period like bills.</div>'+
+    '<button class="btn primary" onclick="newPiggyModal()" style="flex-shrink:0;">＋ New Goal</button>'+
+  '</div>';
+  if(!active.length && !archived.length){
+    h+='<div style="text-align:center;padding:50px 20px;color:var(--text-dim);">'+
+      '<div style="font-size:44px;margin-bottom:12px;">🐷</div>'+
+      '<div style="font-size:15px;font-weight:600;margin-bottom:6px;">No piggy banks yet</div>'+
+      '<div style="font-size:13px;">Set a goal, a deadline, and Heath will figure out how much to tuck away each period.</div>'+
+    '</div>';
+  }
+  active.forEach(function(pg){
+    const saved=piggySaved(pg);
+    const pct=Math.min(100,Math.round(saved/pg.goal*100));
+    const isDone=saved>=pg.goal;
+    const pastDeadline=fmtDate(new Date())>pg.deadline && !isDone;
+    const notDone=(pg.contributions||[]).filter(c=>!c.done);
+    const perAmt=notDone.length?notDone[0].amount:0;
+    const dl=new Date(pg.deadline+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:12px;background:var(--bg2);">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">'+
+        '<div><div style="font-size:16px;font-weight:700;">'+(isDone?'🎉 ':'🐷 ')+esc(pg.name)+'</div>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-top:2px;">'+fmtD(saved)+' of '+fmtD(pg.goal)+' · by '+dl+(pastDeadline?' <span style="color:var(--red);font-weight:700;">— past deadline</span>':'')+'</div></div>'+
+        '<div style="display:flex;gap:6px;flex-shrink:0;">'+
+          (isDone?'<button class="btn" onclick="archivePiggy(\''+pg.id+'\')" style="font-size:12px;">Archive 🎉</button>':'')+
+          '<button class="act-btn" onclick="extendPiggyModal(\''+pg.id+'\')" title="Adjust goal/deadline">✏️</button>'+
+          '<button class="act-btn del" onclick="deletePiggy(\''+pg.id+'\')" title="Delete">'+(S.ui_armDelPiggy===pg.id?'❓':'🗑️')+'</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;margin-bottom:8px;">'+
+        '<div style="background:'+(isDone?'var(--green)':'var(--amber)')+';height:10px;width:'+pct+'%;border-radius:6px;transition:width .3s;"></div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);">'+
+        '<span>'+pct+'% saved</span>'+
+        (isDone?'<span style="color:var(--green);font-weight:700;">GOAL REACHED!</span>'
+          :pastDeadline?'<span><button class="btn" style="font-size:11px;padding:3px 8px;" onclick="extendPiggyModal(\''+pg.id+'\')">Extend deadline</button></span>'
+          :'<span>'+fmtD(perAmt)+' / period · '+notDone.length+' periods left</span>')+
+      '</div>'+
+    '</div>';
+  });
+  if(archived.length){
+    h+='<div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;">Filled Piggies 🎉</div>';
+    archived.forEach(function(pg){
+      h+='<div style="border:1px dashed var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:8px;opacity:.65;display:flex;justify-content:space-between;">'+
+        '<span style="font-size:13px;">🏆 '+esc(pg.name)+'</span>'+
+        '<span style="font-size:13px;color:var(--green);font-weight:700;">'+fmtD(pg.goal)+'</span>'+
+      '</div>';
+    });
+  }
+  root.innerHTML=h;
+}
+
 function setTab(tab) {
   _statDropdown = null;
   DC.tab=tab;
   document.getElementById('tab-btn-periods').className='tab-btn'+(tab==='periods'?' active':'');
   document.getElementById('tab-btn-debt').className='tab-btn'+(tab==='debt'?' active':'');
+  document.getElementById('tab-btn-piggy').className='tab-btn'+(tab==='piggy'?' active':'');
   document.getElementById('tab-periods').style.display=tab==='periods'?'':'none';
   document.getElementById('tab-debt').style.display=tab==='debt'?'':'none';
+  document.getElementById('tab-piggy').style.display=tab==='piggy'?'':'none';
   if(tab==='debt') renderDebt();
+  if(tab==='piggy') renderPiggy();
 }
 
 function render() { renderHeader(); renderTimeline(); renderPeriods(); if(S.ui_manage) renderModal(); }
@@ -554,7 +811,7 @@ function renderHeader() {
   // Period Δ = whole-period plan: ALL income minus ALL bills for the active period,
   // regardless of received/cleared status — so checking things off never moves it.
   const _ap=S.periods.find(pp=>pp.active);
-  const diff=_ap?(( _ap.income||0)+(_ap.additionalIncome||[]).reduce((s,a)=>s+(a.amount||0),0)-_ap.bills.reduce((s,b)=>s+(b.amount||0),0)):0;
+  const diff=_ap?((p=>{const inc=(p.incomeEntries&&p.incomeEntries.length)?p.incomeEntries.reduce((s,e)=>s+resolveEntry(e).value,0):(p.income||0);return inc;})(_ap)+(_ap.additionalIncome||[]).reduce((s,a)=>s+(a.amount||0),0)-_ap.bills.reduce((s,b)=>s+(b.amount||0),0)-(S.piggies||[]).reduce((s,pg)=>{if(pg.archived)return s;const c=(pg.contributions||[]).find(c=>c.periodId===_ap.id);return s+(c?(c.amount||0):0);},0)):0;
   document.getElementById('bal-display').textContent='$'+S.balance.toLocaleString('en-US',{maximumFractionDigits:0});
   const bals=getRunningBals();
   let negCount=0,warnCount=0,tightCount=0;
@@ -678,7 +935,24 @@ function renderPeriodBody(p,periodIdx,startBal) {
   // Income section
   html+='<div class="bill-row sec-hdr"><div class="sec-lbl">Income</div></div>';
   const pcCleared=!!p.incomeCleared;
-  html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button></div></div>';
+  // ── Income rows: one per source, with hourly pipeline ──
+  if (p.incomeEntries && p.incomeEntries.length) {
+    p.incomeEntries.forEach(function(e, ei) {
+      const inc = incomeSrc(e.incomeId);
+      if (!inc) return;
+      const res = resolveEntry(e);
+      const clr = e.cleared;
+      const tierBadge = res.tier==='actual' ? '<span style="font-size:9px;font-weight:700;color:var(--green);border:1px solid var(--green);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:1px;">ACTUAL</span>'
+        : res.tier==='est' ? '<span style="font-size:9px;font-weight:700;color:var(--amber);border:1px solid var(--amber);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:1px;">EST</span>'
+        : (inc.type==='hourly' ? '<span style="font-size:9px;font-weight:700;color:var(--text-dim);border:1px solid var(--border2);border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:1px;">AVG</span>' : '');
+      const hoursCtl = inc.type==='hourly' && !clr
+        ? '<span style="font-size:11px;color:var(--text-dim);margin-left:8px;">'+(e.hours!=null&&e.hours>0?e.hours+'h':'')+'</span>'
+        : '';
+      html+='<div class="bill-row"><div class="status-btn'+(clr?' cleared':'')+'" onclick="toggleEntryCleared(\''+p.id+'\','+ei+')" title="'+(clr?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(clr?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(clr?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(inc.name)+tierBadge+hoursCtl+'</div><div class="bill-amt in" style="'+(clr?'opacity:.35;':'')+'">'+(clr?'—':'+'+fmtD(res.value))+'</div><div class="bill-acts"><button class="act-btn" onclick="editIncomeEntry(\''+p.id+'\','+ei+')">✏️</button></div></div>';
+    });
+  } else {
+    html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button></div></div>';
+  }
   (p.additionalIncome||[]).forEach(function(a,ai){
     const aCl=a.status==='cleared';
     html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
@@ -704,8 +978,18 @@ function renderPeriodBody(p,periodIdx,startBal) {
     '</div>';
   }
 
+  // ── Piggy Bank contribution rows (behave like focused bills) ──
+  var piggyRows='';
+  (S.piggies||[]).forEach(function(pg){
+    if (pg.archived) return;
+    const c=(pg.contributions||[]).find(c=>c.periodId===p.id);
+    if (!c || !c.amount) return;
+    piggyRows+='<div class="bill-row"><div class="status-btn'+(c.done?' cleared':'')+'" onclick="togglePiggyContrib(\''+pg.id+'\',\''+p.id+'\')" title="'+(c.done?'Contributed — click to undo':'Mark contribution made (moves money out of spendable balance)')+'">'+(c.done?'✓':'·')+'</div><div class="bill-day">🐷</div><div class="bill-name" style="'+(c.done?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(pg.name)+' <span style="font-size:10px;color:var(--text-dim);">(piggy)</span></div><div class="bill-amt" style="'+(c.done?'opacity:.35;':'color:var(--amber);')+'">'+(c.done?'—':'−'+fmtD(c.amount))+'</div><div class="bill-acts"></div></div>';
+  });
+
   // Bills section
   html+='<div class="bill-row sec-hdr"><div class="sec-lbl">Bills & Expenses</div></div>';
+  html+=piggyRows;
   if (startBal!==null) {
     const pre = startBal + periodIncomeTotal(p);
     html+='<div class="bill-row" style="opacity:.45;"><div class="status-btn" style="cursor:default;border:none;"></div><div class="bill-day"></div><div class="bill-name" style="color:var(--text-dim);font-size:13px;">Pre-expenses balance</div><div class="bill-amt" style="color:var(--text-mid);">+'+fmtD(pre)+'</div><div class="bill-acts"></div></div>';
@@ -1125,6 +1409,60 @@ function saveAddl(pid,idx){
   persist();closeModal();render();
 }
 function delAddl(pid,idx){const p=S.periods.find(pp=>pp.id===pid);if(p?.additionalIncome){p.additionalIncome.splice(idx,1);persist();render();}}
+// ── Income entry: toggle cleared ──
+function toggleEntryCleared(pid, ei) {
+  const p=S.periods.find(pp=>pp.id===pid); if(!p||!p.incomeEntries||!p.incomeEntries[ei])return;
+  p.incomeEntries[ei].cleared = !p.incomeEntries[ei].cleared;
+  persist(); render();
+}
+
+// ── Income entry editor: hours + actual override ──
+function editIncomeEntry(pid, ei) {
+  const p=S.periods.find(pp=>pp.id===pid); if(!p)return;
+  const e=p.incomeEntries[ei]; if(!e)return;
+  const inc=incomeSrc(e.incomeId); if(!inc)return;
+  const res=resolveEntry(e);
+  const isHourly = inc.type==='hourly';
+  const rate = effectiveRate(inc);
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>'+esc(inc.name)+'</h2>'+
+        (isHourly
+          ? '<span class="m-lbl">Hours this period</span>'+
+            '<input class="m-input" id="ie-hours" type="number" min="0" step="0.5" value="'+(e.hours!=null?e.hours:'')+'" placeholder="e.g. 40">'+
+            '<div style="font-size:12px;color:var(--text-dim);margin:-4px 0 10px;">Rate: ~'+fmtD(rate)+'/hr (self-calibrating)'+(e.hours>0?' → est '+fmtD(Math.round(e.hours*rate)):'')+'</div>'
+          : '')+
+        '<span class="m-lbl">Actual paycheck (overrides '+(isHourly?'estimate':'salary')+') — leave blank to use '+(isHourly?'estimate/average':'salary amount')+'</span>'+
+        '<input class="m-input" id="ie-actual" type="number" min="0" step="0.01" value="'+(e.actual!=null?e.actual:'')+'" placeholder="'+res.value+'">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-pid="'+pid+'" data-ei="'+ei+'" onclick="saveIncomeEntry(this.dataset.pid,parseInt(this.dataset.ei))">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById(isHourly?'ie-hours':'ie-actual');if(el){el.focus();el.select();}},50);
+}
+function saveIncomeEntry(pid, ei) {
+  const p=S.periods.find(pp=>pp.id===pid); if(!p)return;
+  const e=p.incomeEntries[ei]; if(!e)return;
+  const inc=incomeSrc(e.incomeId);
+  const hEl=document.getElementById('ie-hours');
+  const aEl=document.getElementById('ie-actual');
+  if (hEl) { const h=parseFloat(hEl.value); e.hours = isNaN(h)?null:h; }
+  if (aEl) {
+    const a=parseFloat(aEl.value);
+    const prevActual=e.actual;
+    e.actual = isNaN(a)?null:a;
+    // Self-calibration: actual + hours = new rate data point
+    if (inc && inc.type==='hourly' && e.actual!=null && e.hours!=null && e.hours>0 && e.actual!==prevActual) {
+      if (!inc.rateHistory) inc.rateHistory=[];
+      inc.rateHistory.push(e.actual/e.hours);
+      if (inc.rateHistory.length>10) inc.rateHistory=inc.rateHistory.slice(-10);
+    }
+  }
+  persist(); closeModal(); render();
+}
+
 function editPaycheck(pid){
   const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
   document.getElementById('modal-root').innerHTML=
@@ -1174,7 +1512,14 @@ function advancePeriod(){
   p.active=false;p.open=false;
   p.bills.forEach(b=>{if(b.status!=='cleared')b.status='cleared';});
   S.periods[ai+1].active=true;S.periods[ai+1].open=true;
+  piggyRecalcAll(); // redistribute goals after advancing
   persist();render();
+  // Running low on periods? Offer to extend.
+  if (S.periods.length-(ai+1) <= 4) {
+    setTimeout(function(){
+      if(confirm('You\'re nearing the end of your generated periods. Add another year now?')) extendPeriods();
+    }, 400);
+  }
 }
 
 // ═══ MANAGE BILLS MODAL ═══
@@ -1205,8 +1550,9 @@ function renderModal(){
             '<button class="btn" onclick="openSyncModal()">☁ Sync settings</button>'+
             '<button class="btn" onclick="importData()">↑ Import</button>'+
             '<button class="btn" onclick="exportData()">↓ Export</button>'+
+            '<button class="btn" onclick="extendPeriods();closeManage();" title="Append another year of periods to the end">＋ Extend 1 year</button>'+
           '</div>'+
-          '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">build '+HEATH_BUILD+'</div>'+
+          '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">'+S.periods.length+' periods · '+(periodLen()===7?'weekly':'bi-weekly')+' · through '+(S.periods.length?new Date(S.periods[S.periods.length-1].endDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'}):'—')+' · build '+HEATH_BUILD+'</div>'+
         '</div>'+
         '<div class="m-actions">'+
           '<button class="btn" onclick="closeManage()">Close</button>'+
@@ -1612,7 +1958,320 @@ function renderViz() {
   });
 }
 
+
+// ═══ SETUP WIZARD ═══
+let WZ = {open:false, step:'welcome', data:{freq:14, anchor:null, incomes:[], curIncome:{}, balance:'', bills:[]}, calMonth:null};
+
+function wzLoad() {
+  try { var r=localStorage.getItem('heath_wizard'); if(r){ var d=JSON.parse(r); WZ.step=d.step||'welcome'; WZ.data=Object.assign(WZ.data,d.data||{}); } } catch(e){}
+}
+function wzSave() { localStorage.setItem('heath_wizard', JSON.stringify({step:WZ.step, data:WZ.data})); }
+function wzShouldShow() {
+  // Only truly fresh installs: no periods with real data, setup not complete
+  if (S.settings && S.settings.setupComplete) return false;
+  if (S.incomes && S.incomes.length) return false;
+  const hasRealData = S.periods.some(p => (p.income||0)>0 || (p.bills||[]).some(b=>(b.amount||0)>0) || (p.additionalIncome||[]).length);
+  return !hasRealData;
+}
+function wzGo(step) { WZ.step=step; wzSave(); renderWizard(); }
+
+function wzStart() {
+  WZ.open=true;
+  wzLoad();
+  renderWizard();
+}
+
+function renderWizard() {
+  let inner='';
+  const st=WZ.step;
+
+  if (st==='welcome') {
+    inner='<div style="text-align:center;padding:20px 0;">'+
+      '<div style="font-size:52px;margin-bottom:10px;">🏦</div>'+
+      '<h1 style="font-size:26px;margin:0 0 6px;color:var(--green);font-family:var(--mono);">HEATH</h1>'+
+      '<div style="font-size:14px;color:var(--text-dim);margin-bottom:30px;">Your pay-period budget ledger</div>'+
+      '<button class="btn primary" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px;" onclick="wzGo(\'create-freq\')">🆕 Create a new Heath</button>'+
+      '<button class="btn" style="width:100%;padding:14px;font-size:15px;" onclick="wzGo(\'link\')">🔗 Link to an existing Heath</button>'+
+    '</div>';
+  }
+
+  else if (st==='link') {
+    inner='<h2 style="margin-top:0;">🔗 Link this device</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Enter the sync code from your other device (Settings → Sync on that device).</div>'+
+      '<span class="m-lbl">Sync code</span>'+
+      '<input class="m-input" id="wz-sync-code" placeholder="your-sync-code" autocapitalize="off">'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'welcome\')">← Back</button>'+
+        '<button class="btn primary" onclick="wzLink()">Connect</button>'+
+      '</div>';
+  }
+
+  else if (st==='create-freq') {
+    inner='<h2 style="margin-top:0;">💰 How often do you get paid?</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:20px;">This sets the length of each budgeting period.</div>'+
+      '<button class="btn'+(WZ.data.freq===7?' primary':'')+'" style="width:100%;padding:16px;font-size:15px;margin-bottom:10px;text-align:left;" onclick="WZ.data.freq=7;wzSave();renderWizard()">'+
+        '<div style="font-weight:700;">📅 Weekly</div><div style="font-size:12px;opacity:.7;margin-top:2px;">52 paychecks a year — 104 periods generated (2 years)</div></button>'+
+      '<button class="btn'+(WZ.data.freq===14?' primary':'')+'" style="width:100%;padding:16px;font-size:15px;margin-bottom:20px;text-align:left;" onclick="WZ.data.freq=14;wzSave();renderWizard()">'+
+        '<div style="font-weight:700;">🗓️ Bi-weekly (every 2 weeks)</div><div style="font-size:12px;opacity:.7;margin-top:2px;">26 paychecks a year — 52 periods generated (2 years)</div></button>'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'welcome\')">← Back</button>'+
+        '<button class="btn primary" onclick="wzGo(\'create-anchor\')">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='create-anchor') {
+    // Calendar: current month, allow most-recent payday (one period back) through future
+    const today=new Date(); today.setHours(0,0,0,0);
+    const minDate=addDays(today, -(WZ.data.freq||14));
+    if(!WZ.calMonth) WZ.calMonth=new Date(today.getFullYear(),today.getMonth(),1);
+    const cm=WZ.calMonth;
+    const monthName=cm.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const firstDow=new Date(cm.getFullYear(),cm.getMonth(),1).getDay();
+    const daysInMonth=new Date(cm.getFullYear(),cm.getMonth()+1,0).getDate();
+    let calCells='';
+    ['S','M','T','W','T','F','S'].forEach(function(d){calCells+='<div style="font-size:10px;color:var(--text-dim);text-align:center;font-weight:700;padding:4px 0;">'+d+'</div>';});
+    for(let i=0;i<firstDow;i++)calCells+='<div></div>';
+    for(let day=1;day<=daysInMonth;day++){
+      const dt=new Date(cm.getFullYear(),cm.getMonth(),day);
+      const iso=fmtDate(dt);
+      const selectable=dt>=minDate;
+      const isSel=WZ.data.anchor===iso;
+      const isToday=fmtDate(dt)===fmtDate(today);
+      calCells+='<div onclick="'+(selectable?'WZ.data.anchor=\''+iso+'\';wzSave();renderWizard()':'')+'" style="text-align:center;padding:8px 0;font-size:13px;border-radius:6px;cursor:'+(selectable?'pointer':'default')+';'+
+        (isSel?'background:var(--green);color:#0a0a0a;font-weight:800;':isToday?'border:1px solid var(--green);':'')+
+        (!selectable?'opacity:.25;':'')+'">'+day+'</div>';
+    }
+    inner='<h2 style="margin-top:0;">📆 When does your paycheck hit?</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">Pick your <b>most recent payday</b> (or your next one). This anchors your first budgeting period.</div>'+
+      '<div style="border:1px solid var(--border2);border-radius:10px;padding:12px;background:var(--bg2);">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+          '<button class="btn" style="padding:4px 12px;" onclick="WZ.calMonth=new Date(WZ.calMonth.getFullYear(),WZ.calMonth.getMonth()-1,1);renderWizard()">‹</button>'+
+          '<span style="font-weight:700;font-size:14px;">'+monthName+'</span>'+
+          '<button class="btn" style="padding:4px 12px;" onclick="WZ.calMonth=new Date(WZ.calMonth.getFullYear(),WZ.calMonth.getMonth()+1,1);renderWizard()">›</button>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">'+calCells+'</div>'+
+      '</div>'+
+      (WZ.data.anchor?'<div style="font-size:13px;color:var(--green);margin-top:10px;font-weight:600;">✓ First period starts '+new Date(WZ.data.anchor+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div>':'')+
+      '<div class="m-actions" style="margin-top:16px;">'+
+        '<button class="btn" onclick="wzGo(\'create-freq\')">← Back</button>'+
+        '<button class="btn primary" '+(WZ.data.anchor?'':'disabled style="opacity:.4;"')+' onclick="'+(WZ.data.anchor?'wzGo(\'income-name\')':'')+'">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='income-name') {
+    const n=(WZ.data.incomes||[]).length;
+    inner='<h2 style="margin-top:0;">💵 Income source '+(n+1)+'</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">'+(n===0?'Let\'s set up your main paycheck.':'Set up the next income.')+'</div>'+
+      '<span class="m-lbl">Name it</span>'+
+      '<input class="m-input" id="wz-inc-name" value="'+esc(WZ.data.curIncome.name||'')+'" placeholder="e.g. Emma\'s Paycheck">'+
+      '<span class="m-lbl" style="margin-top:8px;">Income type</span>'+
+      '<button class="btn'+(WZ.data.curIncome.type==='fixed'?' primary':'')+'" style="width:100%;padding:13px;margin-bottom:8px;text-align:left;" onclick="WZ.data.curIncome.name=document.getElementById(\'wz-inc-name\').value;WZ.data.curIncome.type=\'fixed\';wzSave();renderWizard()">'+
+        '<div style="font-weight:700;">💼 Fixed (salary)</div><div style="font-size:12px;opacity:.7;">Same take-home amount every paycheck</div></button>'+
+      '<button class="btn'+(WZ.data.curIncome.type==='hourly'?' primary':'')+'" style="width:100%;padding:13px;margin-bottom:16px;text-align:left;" onclick="WZ.data.curIncome.name=document.getElementById(\'wz-inc-name\').value;WZ.data.curIncome.type=\'hourly\';wzSave();renderWizard()">'+
+        '<div style="font-weight:700;">⏱️ Variable (hourly)</div><div style="font-size:12px;opacity:.7;">Paycheck depends on hours worked — Heath will estimate each period</div></button>'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'create-anchor\')">← Back</button>'+
+        '<button class="btn primary" '+(WZ.data.curIncome.type?'':'disabled style="opacity:.4;"')+' onclick="'+(WZ.data.curIncome.type?'WZ.data.curIncome.name=document.getElementById(\'wz-inc-name\').value;wzSave();wzGo(WZ.data.curIncome.type===\'fixed\'?\'income-fixed\':\'income-hourly\')':'')+'">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='income-fixed') {
+    inner='<h2 style="margin-top:0;">💼 '+esc(WZ.data.curIncome.name||'Paycheck')+'</h2>'+
+      '<span class="m-lbl">Take-home amount per paycheck ($)</span>'+
+      '<input class="m-input" id="wz-inc-amt" type="number" min="0" step="1" value="'+(WZ.data.curIncome.amount||'')+'" placeholder="e.g. 2400">'+
+      '<div style="font-size:12px;color:var(--text-dim);margin:-4px 0 16px;">After taxes — what actually lands in your account.</div>'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'income-name\')">← Back</button>'+
+        '<button class="btn primary" onclick="wzSaveFixed()">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='income-hourly') {
+    inner='<h2 style="margin-top:0;">⏱️ '+esc(WZ.data.curIncome.name||'Paycheck')+'</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Two quick questions — no tax math needed. Heath derives your effective take-home rate.</div>'+
+      '<span class="m-lbl">A typical paycheck (take-home, $)</span>'+
+      '<input class="m-input" id="wz-inc-typical" type="number" min="0" step="1" value="'+(WZ.data.curIncome.typicalPay||'')+'" placeholder="e.g. 1400">'+
+      '<span class="m-lbl">How many hours is that usually?</span>'+
+      '<input class="m-input" id="wz-inc-hours" type="number" min="1" step="0.5" value="'+(WZ.data.curIncome.typicalHours||'')+'" placeholder="e.g. 72">'+
+      '<div style="font-size:12px;color:var(--text-dim);margin:-4px 0 12px;">Heath uses paycheck ÷ hours as your rate, and it self-corrects as real paychecks come in.</div>'+
+      '<span class="m-lbl">Placeholder average per period ($) — used for forecasting until you enter hours</span>'+
+      '<input class="m-input" id="wz-inc-avg" type="number" min="0" step="1" value="'+(WZ.data.curIncome.placeholderAvg||'')+'" placeholder="e.g. 1400">'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'income-name\')">← Back</button>'+
+        '<button class="btn primary" onclick="wzSaveHourly()">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='income-more') {
+    const list=(WZ.data.incomes||[]).map(function(i){
+      return '<div style="border:1px solid var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">'+
+        '<span style="font-size:14px;">'+(i.type==='hourly'?'⏱️':'💼')+' '+esc(i.name)+'</span>'+
+        '<span style="font-size:13px;color:var(--green);font-weight:600;">'+(i.type==='hourly'?('~'+fmtD(i.placeholderAvg||0)+'/period'):fmtD(i.amount||0))+'</span>'+
+      '</div>';
+    }).join('');
+    inner='<h2 style="margin-top:0;">💵 Income sources</h2>'+list+
+      '<div style="font-size:14px;color:var(--text-mid);margin:16px 0 12px;">Is there a second form of income in the household?</div>'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="WZ.data.curIncome={};wzSave();wzGo(\'income-name\')">＋ Add another income</button>'+
+        '<button class="btn primary" onclick="wzGo(\'balance\')">No, continue →</button>'+
+      '</div>';
+  }
+
+  else if (st==='balance') {
+    inner='<h2 style="margin-top:0;">🏦 Starting balance</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">What\'s in your checking account right now? This becomes your live balance — the number in the top-left you\'ll keep current.</div>'+
+      '<span class="m-lbl">Current balance ($)</span>'+
+      '<input class="m-input" id="wz-balance" type="number" step="1" value="'+(WZ.data.balance||'')+'" placeholder="e.g. 1850">'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'income-more\')">← Back</button>'+
+        '<button class="btn primary" onclick="WZ.data.balance=document.getElementById(\'wz-balance\').value;wzSave();wzGo(\'bills\')">Next →</button>'+
+      '</div>';
+  }
+
+  else if (st==='bills') {
+    const list=(WZ.data.bills||[]).map(function(b,i){
+      return '<div style="border:1px solid var(--border2);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">'+
+        '<span>'+esc(b.name)+' <span style="color:var(--text-dim);">· day '+b.day+(b.autopay?' · AP':'')+'</span></span>'+
+        '<span style="display:flex;gap:8px;align-items:center;"><span style="color:var(--red);">'+fmtD(b.amount)+'</span>'+
+        '<button class="act-btn del" onclick="WZ.data.bills.splice('+i+',1);wzSave();renderWizard()">🗑️</button></span>'+
+      '</div>';
+    }).join('');
+    inner='<h2 style="margin-top:0;">🧾 Your bills</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">Add your recurring bills. They\'ll automatically appear in the right period based on due date. You can add more later.</div>'+
+      (list||'<div style="text-align:center;color:var(--text-dim);font-size:13px;padding:16px;">No bills added yet</div>')+
+      '<div style="border:1px dashed var(--border2);border-radius:10px;padding:14px;margin:12px 0;">'+
+        '<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px;">'+
+          '<div><span class="m-lbl">Bill name</span><input class="m-input" id="wz-bill-name" placeholder="e.g. Rent" style="margin-bottom:0;"></div>'+
+          '<div><span class="m-lbl">Amount ($)</span><input class="m-input" id="wz-bill-amt" type="number" min="0" step="1" style="margin-bottom:0;"></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'+
+          '<div><span class="m-lbl">Due day (1-31)</span><input class="m-input" id="wz-bill-day" type="number" min="1" max="31" style="margin-bottom:0;"></div>'+
+          '<div><span class="m-lbl">Category</span><select class="m-input" id="wz-bill-cat" style="margin-bottom:0;"><option value="fixed">Fixed</option><option value="variable">Variable</option><option value="annual">Annual</option></select></div>'+
+          '<div><span class="m-lbl">Link (optional)</span><input class="m-input" id="wz-bill-url" placeholder="https://" style="margin-bottom:0;"></div>'+
+        '</div>'+
+        '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);margin-bottom:10px;">'+
+          '<input type="checkbox" id="wz-bill-ap" style="accent-color:var(--green);width:15px;height:15px;">'+
+          '<span>Autopay (marks itself pending automatically)</span></label>'+
+        '<button class="btn" style="width:100%;" onclick="wzAddBill()">＋ Add bill</button>'+
+      '</div>'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzGo(\'balance\')">← Back</button>'+
+        '<button class="btn primary" onclick="wzGo(\'sync-offer\')">'+((WZ.data.bills||[]).length?'Next →':'Skip for now →')+'</button>'+
+      '</div>';
+  }
+
+  else if (st==='sync-offer') {
+    inner='<h2 style="margin-top:0;">☁️ Back it up?</h2>'+
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Set a sync code now and your Heath is instantly backed up + shareable with a partner\'s phone. You can also do this later from the ☁ Sync button.</div>'+
+      '<span class="m-lbl">Choose a sync code (8+ characters, memorable)</span>'+
+      '<input class="m-input" id="wz-sync-new" placeholder="e.g. helsley-budget-2026" autocapitalize="off">'+
+      '<div class="m-actions">'+
+        '<button class="btn" onclick="wzFinish(false)">Skip →</button>'+
+        '<button class="btn primary" onclick="wzFinish(true)">Set up sync & finish</button>'+
+      '</div>';
+  }
+
+  document.getElementById('wizard-root').innerHTML =
+    '<div style="position:fixed;inset:0;background:var(--bg);z-index:500;overflow-y:auto;">'+
+      '<div style="max-width:480px;margin:0 auto;padding:30px 20px 60px;">'+
+        (st!=='welcome'?'<div style="font-size:11px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;margin-bottom:20px;">Heath Setup</div>':'')+
+        inner+
+      '</div>'+
+    '</div>';
+}
+
+function wzLink() {
+  const code=(document.getElementById('wz-sync-code')?.value||'').trim().toLowerCase();
+  if(!code||code.length<8){alert('Sync code must be at least 8 characters.');return;}
+  SYNC.cfg=DEFAULT_FB_CONFIG; SYNC.code=code;
+  SYNC.localStamp=0; localStorage.setItem('heath_sync_stamp','0');
+  localStorage.setItem('heath_sync',JSON.stringify({cfg:SYNC.cfg,code:SYNC.code}));
+  S.settings.setupComplete=true; persist();
+  localStorage.removeItem('heath_wizard');
+  WZ.open=false;
+  document.getElementById('wizard-root').innerHTML='';
+  syncInit();
+  render();
+}
+
+function wzSaveFixed() {
+  const amt=parseFloat(document.getElementById('wz-inc-amt')?.value);
+  if(isNaN(amt)||amt<0){alert('Enter the paycheck amount.');return;}
+  WZ.data.curIncome.amount=Math.round(amt);
+  WZ.data.incomes.push(Object.assign({},WZ.data.curIncome));
+  WZ.data.curIncome={};
+  wzSave(); wzGo('income-more');
+}
+function wzSaveHourly() {
+  const pay=parseFloat(document.getElementById('wz-inc-typical')?.value);
+  const hrs=parseFloat(document.getElementById('wz-inc-hours')?.value);
+  const avg=parseFloat(document.getElementById('wz-inc-avg')?.value);
+  if(isNaN(pay)||isNaN(hrs)||hrs<=0){alert('Enter a typical paycheck and hours.');return;}
+  WZ.data.curIncome.typicalPay=Math.round(pay);
+  WZ.data.curIncome.typicalHours=hrs;
+  WZ.data.curIncome.rate=pay/hrs;
+  WZ.data.curIncome.placeholderAvg=isNaN(avg)?Math.round(pay):Math.round(avg);
+  WZ.data.incomes.push(Object.assign({},WZ.data.curIncome));
+  WZ.data.curIncome={};
+  wzSave(); wzGo('income-more');
+}
+function wzAddBill() {
+  const name=(document.getElementById('wz-bill-name')?.value||'').trim();
+  const amt=parseFloat(document.getElementById('wz-bill-amt')?.value);
+  const day=parseInt(document.getElementById('wz-bill-day')?.value);
+  const cat=document.getElementById('wz-bill-cat')?.value||'fixed';
+  const url=(document.getElementById('wz-bill-url')?.value||'').trim();
+  const ap=!!document.getElementById('wz-bill-ap')?.checked;
+  if(!name||isNaN(amt)||isNaN(day)||day<1||day>31){alert('Name, amount and due day (1-31) are required.');return;}
+  WZ.data.bills.push({name, amount:Math.round(amt), day, category:cat, url, autopay:ap});
+  wzSave(); renderWizard();
+  setTimeout(function(){var el=document.getElementById('wz-bill-name');if(el)el.focus();},50);
+}
+
+function wzFinish(withSync) {
+  // Build the real Heath from wizard data
+  S.settings.periodLength = WZ.data.freq||14;
+  S.settings.anchorDate = WZ.data.anchor||fmtDate(new Date());
+  S.settings.setupComplete = true;
+  // Income sources
+  S.incomes = (WZ.data.incomes||[]).map(function(i){
+    return {id:uid(), name:i.name||'Paycheck', type:i.type||'fixed',
+      amount:i.type==='fixed'?(i.amount||0):0,
+      rate:i.type==='hourly'?(i.rate||0):0,
+      typicalHours:i.typicalHours||0,
+      placeholderAvg:i.type==='hourly'?(i.placeholderAvg||0):0,
+      rateHistory:[]};
+  });
+  // Balance
+  const bal=parseFloat(WZ.data.balance);
+  S.balance = isNaN(bal)?0:Math.round(bal);
+  // Bill templates
+  S.templates = (WZ.data.bills||[]).map(function(b){
+    return {id:uid(), name:b.name, amount:b.amount, day:b.day, category:b.category||'fixed', autopay:!!b.autopay, url:b.url||''};
+  });
+  // Generate periods from anchor
+  S.periods = genPeriods(defaultPeriodCount());
+  S.periods.forEach(p=>{p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
+  persist();
+  localStorage.removeItem('heath_wizard');
+  WZ.open=false;
+  document.getElementById('wizard-root').innerHTML='';
+  render();
+  // Sync
+  if (withSync) {
+    const code=(document.getElementById('wz-sync-new')?.value||'').trim().toLowerCase();
+    if(code&&code.length>=8){
+      SYNC.cfg=DEFAULT_FB_CONFIG; SYNC.code=code;
+      SYNC.localStamp=Date.now(); localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
+      localStorage.setItem('heath_sync',JSON.stringify({cfg:SYNC.cfg,code:SYNC.code}));
+      syncInit();
+    } else if(code){ alert('Sync code was under 8 characters — skipped. Set it up anytime via ☁ Sync.'); }
+  }
+}
+
 loadStorage();
+migrateToV3();
+if (wzShouldShow()) { wzStart(); }
 render();
 
 // ═══ IMPORT (restore from exported JSON) ═══
@@ -1672,12 +2331,15 @@ function syncApplyRemote(v){
   try{
     if(v.balance!==undefined)S.balance=v.balance;
     S.templates=v.templates||[];
-    S.periods=(v.periods||[]).map(function(p){if(!p.bills)p.bills=[];if(!p.additionalIncome)p.additionalIncome=[];return p;});
+    S.periods=(v.periods||[]).map(function(p){if(!p.bills)p.bills=[];if(!p.additionalIncome)p.additionalIncome=[];if(!p.incomeEntries)p.incomeEntries=[];return p;});
     DC.cards=v.dc||[];
     S.subtitle=v.subtitle||'';
+    if(v.settings)S.settings=Object.assign({periodLength:14,anchorDate:null,setupComplete:false},v.settings);
+    S.incomes=v.incomes||[];
+    S.piggies=v.piggies||[];
     SYNC.localStamp=v.updatedAt||Date.now();
     localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
-    localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||''}));
+    localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies}));
     localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards}));
     render();
   }finally{SYNC.applying=false;}
@@ -1686,7 +2348,7 @@ function syncPushNow(){
   if(!SYNC.ref)return;
   SYNC.localStamp=Date.now();
   localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
-  var payload=JSON.parse(JSON.stringify({updatedAt:SYNC.localStamp,clientId:SYNC.clientId,balance:S.balance,templates:S.templates,periods:S.periods,dc:DC.cards,subtitle:S.subtitle||''}));
+  var payload=JSON.parse(JSON.stringify({updatedAt:SYNC.localStamp,clientId:SYNC.clientId,balance:S.balance,templates:S.templates,periods:S.periods,dc:DC.cards,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies}));
   SYNC.ref.set(payload).then(function(){syncSetStatus('synced');}).catch(function(e){syncSetStatus('error',e.message);});
 }
 function syncQueuePush(){
@@ -1798,7 +2460,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-03-G";
+var HEATH_BUILD="2026-07-09-A";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
