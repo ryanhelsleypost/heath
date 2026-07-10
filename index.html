@@ -216,7 +216,8 @@ body.theme-mint { --bg:#eef7f0; --surface:#ffffff; --surface2:#dfeee3; --border:
     </div>
     <div id="hdr-stats" class="hdr-stats"></div>
     <div class="hdr-actions">
-      <button class="btn" onclick="openManage()" title="Settings — bills, sync, import/export">⚙</button>
+      <button class="btn" onclick="heathUndo()" title="Undo last change" style="font-size:14px;">↩</button>
+      <button class="btn" onclick="openManage()" title="Settings">⚙</button>
     </div>
   </div>
   <div id="timeline-strip-wrap"></div>
@@ -1325,6 +1326,7 @@ function qsLog(pid){
     if(!b){ b={id:uid(),templateId:null,name:'🍔 Food (eating out)',amount:0,day:null,status:'upcoming',category:'variable',tag:'quickspend-food',url:'',autopay:false,recurrence:'one-off',spent:0};
       p.bills.push(b); }
     b.amount=(b.amount||0)+amt; b.spent=b.amount;
+    S.balance-=amt;
     stampHistory(b,'+$'+amt+' food');
   } else {
     // Linked: draw down the Groceries / Gas budget bill
@@ -1332,6 +1334,7 @@ function qsLog(pid){
     let b=p.bills.find(bb=>names.indexOf((bb.name||'').toLowerCase())>-1);
     if(!b){ alert('No '+(kind==='groc'?'Groceries':'Gas')+' bill found in this period. Add one first (or it may be named differently).'); return; }
     b.spent=(b.spent||0)+amt;
+    S.balance-=amt;
     stampHistory(b,'+$'+amt+' spent');
   }
   S.ui_qsOpen='';
@@ -3214,7 +3217,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-10-H";
+var HEATH_BUILD="2026-07-10-I";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
