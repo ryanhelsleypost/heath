@@ -484,9 +484,16 @@ function mbDel(pid,bid){
 function buildBillsForPeriod(p) {
   const bills = [];
   (S.templates||[]).forEach(function(t) {
-    if (billDueInPeriod(t.day, p.startDate, p.endDate)) {
-      bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',autopay:!!t.autopay});
+    if (!billDueInPeriod(t.day, p.startDate, p.endDate)) return;
+    // Annual / holiday templates only fire in their anchored month
+    if ((t.recurrence==='annual'||t.recurrence==='holiday') && t.month!=null) {
+      const s=new Date(p.startDate+'T00:00:00'), e=new Date(p.endDate+'T00:00:00');
+      const dueThis=new Date(s.getFullYear(), t.month, Math.min(t.day||1,28));
+      const dueNext=new Date(s.getFullYear()+1, t.month, Math.min(t.day||1,28));
+      const inRange=(dueThis>=s&&dueThis<=e)||(dueNext>=s&&dueNext<=e);
+      if(!inRange) return;
     }
+    bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',autopay:!!t.autopay,recurrence:t.recurrence||'recurring'});
   });
   bills.sort((a,b)=>(a.day||99)-(b.day||99));
   return bills;
@@ -2286,8 +2293,9 @@ function renderWizard() {
 
   else if (st==='bills') {
     const list=(WZ.data.bills||[]).map(function(b,i){
+      const recIcon={recurring:'🔁','one-off':'1️⃣',holiday:'🎄',annual:'📅'}[b.recurrence||'recurring'];
       return '<div style="border:1px solid var(--border2);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;font-size:13px;">'+
-        '<span>'+esc(b.name)+' <span style="color:var(--text-dim);">· day '+b.day+(b.autopay?' · AP':'')+'</span></span>'+
+        '<span>'+recIcon+' '+esc(b.name)+' <span style="color:var(--text-dim);">· day '+b.day+(b.autopay?' · AP':'')+'</span></span>'+
         '<span style="display:flex;gap:8px;align-items:center;"><span style="color:var(--red);">'+fmtD(b.amount)+'</span>'+
         '<button class="act-btn del" onclick="WZ.data.bills.splice('+i+',1);wzSave();renderWizard()">🗑️</button></span>'+
       '</div>';
@@ -2300,11 +2308,22 @@ function renderWizard() {
           '<div><span class="m-lbl">Bill name</span><input class="m-input" id="wz-bill-name" placeholder="e.g. Rent" style="margin-bottom:0;"></div>'+
           '<div><span class="m-lbl">Amount ($)</span><input class="m-input" id="wz-bill-amt" type="number" min="0" step="1" style="margin-bottom:0;"></div>'+
         '</div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'+
+        '<div style="display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-bottom:8px;">'+
           '<div><span class="m-lbl">Due day (1-31)</span><input class="m-input" id="wz-bill-day" type="number" min="1" max="31" style="margin-bottom:0;"></div>'+
-          '<div><span class="m-lbl">Category</span><select class="m-input" id="wz-bill-cat" style="margin-bottom:0;"><option value="fixed">Fixed</option><option value="variable">Variable</option><option value="annual">Annual</option></select></div>'+
-          '<div><span class="m-lbl">Link (optional)</span><input class="m-input" id="wz-bill-url" placeholder="https://" style="margin-bottom:0;"></div>'+
+          '<div><span class="m-lbl">Repeats</span><select class="m-input" id="wz-bill-rec" style="margin-bottom:0;" onchange="document.getElementById(\'wz-bill-month-wrap\').style.display=(this.value===\'annual\'||this.value===\'holiday\')?\'\':\'none\';">'+
+            '<option value="recurring">🔁 Recurring (monthly)</option>'+
+            '<option value="one-off">1️⃣ One-off</option>'+
+            '<option value="holiday">🎄 Holiday (yearly)</option>'+
+            '<option value="annual">📅 Annual (yearly)</option>'+
+          '</select></div>'+
         '</div>'+
+        '<div id="wz-bill-month-wrap" style="display:none;margin-bottom:8px;">'+
+          '<span class="m-lbl">Which month?</span>'+
+          '<select class="m-input" id="wz-bill-month" style="margin-bottom:0;">'+
+            ['January','February','March','April','May','June','July','August','September','October','November','December'].map(function(m,i){return '<option value="'+i+'">'+m+'</option>';}).join('')+
+          '</select>'+
+        '</div>'+
+        '<div style="margin-bottom:8px;"><span class="m-lbl">Link (optional)</span><input class="m-input" id="wz-bill-url" placeholder="https://" style="margin-bottom:0;"></div>'+
         '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);margin-bottom:10px;">'+
           '<input type="checkbox" id="wz-bill-ap" style="accent-color:var(--green);width:15px;height:15px;">'+
           '<span>Autopay (marks itself pending automatically)</span></label>'+
@@ -2375,11 +2394,12 @@ function wzAddBill() {
   const name=(document.getElementById('wz-bill-name')?.value||'').trim();
   const amt=parseFloat(document.getElementById('wz-bill-amt')?.value);
   const day=parseInt(document.getElementById('wz-bill-day')?.value);
-  const cat=document.getElementById('wz-bill-cat')?.value||'fixed';
+  const rec=document.getElementById('wz-bill-rec')?.value||'recurring';
+  const month=parseInt(document.getElementById('wz-bill-month')?.value);
   const url=(document.getElementById('wz-bill-url')?.value||'').trim();
   const ap=!!document.getElementById('wz-bill-ap')?.checked;
   if(!name||isNaN(amt)||isNaN(day)||day<1||day>31){alert('Name, amount and due day (1-31) are required.');return;}
-  WZ.data.bills.push({name, amount:Math.round(amt), day, category:cat, url, autopay:ap});
+  WZ.data.bills.push({name, amount:Math.round(amt), day, recurrence:rec, month:(rec==='annual'||rec==='holiday')&&!isNaN(month)?month:null, category:rec==='annual'||rec==='holiday'?'annual':'fixed', url, autopay:ap});
   wzSave(); renderWizard();
   setTimeout(function(){var el=document.getElementById('wz-bill-name');if(el)el.focus();},50);
 }
@@ -2401,13 +2421,20 @@ function wzFinish(withSync) {
   // Balance
   const bal=parseFloat(WZ.data.balance);
   S.balance = isNaN(bal)?0:Math.round(bal);
-  // Bill templates
-  S.templates = (WZ.data.bills||[]).map(function(b){
-    return {id:uid(), name:b.name, amount:b.amount, day:b.day, category:b.category||'fixed', autopay:!!b.autopay, url:b.url||''};
+  // Bill templates — recurring + annual/holiday become templates (annual/holiday carry month anchors)
+  const oneOffs = (WZ.data.bills||[]).filter(b=>b.recurrence==='one-off');
+  S.templates = (WZ.data.bills||[]).filter(b=>b.recurrence!=='one-off').map(function(b){
+    return {id:uid(), name:b.name, amount:b.amount, day:b.day, category:b.category||'fixed', autopay:!!b.autopay, url:b.url||'', recurrence:b.recurrence||'recurring', month:b.month};
   });
   // Generate periods from anchor
   S.periods = genPeriods(defaultPeriodCount());
   S.periods.forEach(p=>{p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
+  // One-off bills: drop each into the first period containing its next due date
+  oneOffs.forEach(function(b){
+    const target = S.periods.find(p=>billDueInPeriod(b.day, p.startDate, p.endDate));
+    if (target) target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:'fixed',tag:'',url:b.url||'',autopay:!!b.autopay,recurrence:'one-off'});
+  });
+  S.periods.forEach(p=>p.bills.sort((a,c)=>(a.day||99)-(c.day||99)));
   persist();
   localStorage.removeItem('heath_wizard');
   WZ.open=false;
@@ -2616,7 +2643,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-09-D";
+var HEATH_BUILD="2026-07-09-E";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
