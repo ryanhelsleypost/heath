@@ -184,6 +184,235 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .trow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
 .trow:last-child{border-bottom:none;}
 ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+body.theme-emerald { --bg:#0a0f0a; --bg2:#111a11; --text:#d4e8d4; --text-mid:#8ab88a; --text-dim:#5a7a5a; --accent:#34d399; --green:#22c55e; --border:#1a2e1a; --border2:#254025; --hover:rgba(52,211,153,.08); --red:#ef4444; --amber:#f59e0b; }
+body.theme-ocean { --bg:#0a0d14; --bg2:#101824; --text:#c8d8e8; --text-mid:#7a9ab8; --text-dim:#4a6a88; --accent:#38bdf8; --green:#22d3ee; --border:#152030; --border2:#1e3048; --hover:rgba(56,189,248,.08); --red:#f87171; --amber:#fbbf24; }
+body.theme-lavender { --bg:#0e0a14; --bg2:#18122a; --text:#d8cee8; --text-mid:#a090c0; --text-dim:#6a5a8a; --accent:#a78bfa; --green:#a3e635; --border:#201838; --border2:#2e2448; --hover:rgba(167,139,250,.08); --red:#fb7185; --amber:#fbbf24; }
+body.theme-midnight { --bg:#08080c; --bg2:#111118; --text:#e0e0e8; --text-mid:#8888a0; --text-dim:#555568; --accent:#818cf8; --green:#4ade80; --border:#1a1a28; --border2:#252538; --hover:rgba(129,140,248,.08); --red:#f87171; --amber:#fbbf24; }
+body.theme-rust { --bg:#120c0a; --bg2:#1e1410; --text:#e8d8d0; --text-mid:#b89080; --text-dim:#886858; --accent:#fb923c; --green:#84cc16; --border:#2a1a14; --border2:#3a2820; --hover:rgba(251,146,60,.08); --red:#ef4444; --amber:#fbbf24; }
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-top">
+    <div>
+      <div class="app-title"><span id="app-title-text">Heath</span> <span id="sync-dot" title="Sync off — click ☁ Sync to set up" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim);margin-left:6px;vertical-align:middle;cursor:pointer;" onclick="openSyncModal()"></span></div>
+      <div class="bal-wrap">
+        <div class="bal-lbl">Balance</div>
+        <div id="bal-display" class="bal-display" onclick="editBal()">$0</div>
+        <input id="bal-input" class="bal-input" type="text" style="display:none"
+          onblur="saveBal()" onkeydown="if(event.key==='Enter')saveBal()">
+        <div id="bal-side" class="bal-side"></div>
+      </div>
+    </div>
+    <div id="hdr-stats" class="hdr-stats"></div>
+    <div class="hdr-actions">
+      <button class="btn" onclick="openManage()" title="Settings — bills, sync, import/export">⚙</button>
+    </div>
+  </div>
+  <div id="timeline-strip-wrap"></div>
+</div>
+
+<div class="main-wrap">
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-btn-periods" onclick="setTab('periods')">Pay Periods</button>
+    <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
+    <button class="tab-btn" id="tab-btn-piggy" onclick="setTab('piggy')">🐷 Piggy Bank</button>
+  </div>
+  <div id="tab-periods"></div>
+  <div id="tab-debt" style="display:none"></div>
+  <div id="tab-piggy" style="display:none"></div>
+</div>
+<div id="modal-root"></div>
+<div id="wizard-root"></div>
+
+
+</body>
+</html>html+='<div id="'+billElId+'" class="bill-row="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heath</title>
+<link rel="icon" href="data:,">
+<meta name="theme-color" content="#0e0f0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Heath">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0e0f0e; --surface:#161817; --surface2:#1e201e;
+  --border:#2a2d2a; --border2:#333633;
+  --green:#4ade80; --green-dim:#22543d;
+  --red:#f87171; --red-dim:#7f1d1d;
+  --amber:#fbbf24; --amber-dim:#78350f;
+  --blue:#60a5fa; --blue-dim:#1e3a5f;
+  --text:#f5f7f5; --text-mid:#bcc4bc; --text-dim:#7f8c7f;
+  --mono:'IBM Plex Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15px;line-height:1.5;}
+/* Header */
+.hdr{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 20px;}
+.hdr-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.app-title{font-size:12px;color:var(--text-dim);letter-spacing:.15em;text-transform:uppercase;}
+.bal-wrap{display:flex;align-items:center;gap:8px;margin-top:2px;}
+.bal-side{display:flex;flex-direction:column;gap:5px;margin-left:12px;padding-left:14px;border-left:1px solid var(--border2);}
+.bal-side .stat-val{font-size:14px;}
+.bal-lbl{font-size:12px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;}
+.bal-display{font-size:32px;font-weight:600;color:var(--green);cursor:pointer;border-bottom:1px dashed var(--green-dim);}
+.bal-input{font-family:var(--mono);font-size:32px;font-weight:600;color:var(--green);background:transparent;border:none;border-bottom:1px solid var(--green);outline:none;width:180px;}
+.hdr-stats{display:flex;gap:20px;margin-top:6px;flex-wrap:wrap;}
+.stat{display:flex;flex-direction:column;gap:1px;}
+.stat-lbl{font-size:11px;color:var(--text-dim);letter-spacing:.12em;text-transform:uppercase;}
+.stat-val{font-size:15px;font-weight:600;}
+.stat-val.pos{color:var(--green);} .stat-val.neg{color:var(--red);} .stat-val.amber{color:var(--amber);} .stat-val.neu{color:var(--text-mid);}
+.hdr-actions{display:flex;gap:8px;align-items:center;padding-top:4px;}
+/* Buttons */
+.btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.06em;padding:5px 11px;border-radius:4px;border:1px solid var(--border2);background:var(--surface2);color:var(--text-mid);cursor:pointer;transition:all .15s;}
+.btn:hover{border-color:var(--text-dim);color:var(--text);}
+.btn.primary{border-color:var(--green-dim);color:var(--green);background:#0d2218;}
+.btn.primary:hover{background:#0f2d1d;border-color:var(--green);}
+.btn.danger{border-color:var(--red-dim);color:var(--red);background:#1f0a0a;}
+.btn.danger:hover{background:#2a0d0d;}
+.btn.sm{padding:3px 8px;font-size:12px;}
+/* Tabs */
+.tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+.tab-btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;padding:8px 14px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);cursor:pointer;transition:all .15s;}
+.tab-btn.active{color:var(--green);border-bottom-color:var(--green);}
+.tab-btn:hover:not(.active){color:var(--text-mid);}
+/* Main wrapper */
+.main-wrap{max-width:780px;margin:0 auto;padding:16px 16px 80px;}
+#timeline-strip-wrap{width:calc(100% + 40px);margin:10px -20px -12px;background:var(--bg);border-top:1px solid var(--border);padding-bottom:1px;}
+.add-grid{display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:end;}
+.add-grid.bill{grid-template-columns:1fr 110px 70px auto;}
+
+/* ═══ MOBILE (phones) ═══ */
+@media (max-width:640px){
+  /* prevent iOS auto-zoom when focusing inputs */
+  input,select,textarea{font-size:16px !important;}
+  .hdr{padding:10px 12px;}
+  #timeline-strip-wrap{width:calc(100% + 24px);margin:8px -12px -10px;}
+  .app-title{font-size:11px;letter-spacing:.08em;}
+  .bal-display,.bal-input{font-size:26px;}
+  .bal-input{width:140px;}
+  .bal-side{margin-left:8px;padding-left:10px;gap:3px;}
+  .bal-side .stat-val{font-size:13px;}
+  .hdr-stats{gap:14px;margin-top:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;width:100%;}
+  .hdr-stats .stat{flex-shrink:0;}
+  .stat-val{font-size:14px;}
+  .stat-lbl{font-size:10px;white-space:nowrap;}
+  .hdr-actions{position:absolute;top:8px;right:10px;padding:0;width:auto;}
+  .hdr-actions .btn{flex:none;padding:7px 12px;font-size:14px;}
+  .main-wrap{padding:12px 8px 80px;}
+  .tab-bar{width:100%;}
+  .tab-btn{flex:1;padding:10px 8px;}
+  .period-hdr{padding:11px 10px;}
+  .bill-row{padding:9px 6px;gap:6px;}
+  .bill-day{width:20px;font-size:11px;}
+  .bill-name{font-size:13px;}
+  .bill-amt{font-size:13px;min-width:52px;flex-shrink:0;}
+  .bill-acts{opacity:1;gap:5px;}
+  .act-btn{font-size:17px;padding:6px 8px;min-width:34px;text-align:center;}
+  .status-btn{width:30px;height:30px;font-size:14px;flex-shrink:0;}
+  .btn.sm{padding:6px 10px;}
+  .add-grid,.add-grid.bill{grid-template-columns:1fr 1fr;}
+  .add-grid > div:first-child{grid-column:1/-1;}
+  .modal-backdrop{padding:14px 8px;}
+  .modal{padding:16px;border-radius:10px;}
+  .dc-card-hdr{padding:12px 10px;}
+}
+/* Periods */
+.period{margin-bottom:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.period.active{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim);}
+.period.future{opacity:.78;}
+.period.past{opacity:.5;filter:saturate(.35);transition:opacity .2s,filter .2s;}
+.period.past:hover{opacity:.75;}
+.period.past:hover{opacity:.35;filter:saturate(.3);pointer-events:auto;}
+.period.past .period-hdr{cursor:default;}
+.period-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);cursor:pointer;user-select:none;}
+.period.active .period-hdr{background:#0d2218;}
+.period-badge{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);}
+.period-dates{font-size:13px;font-weight:600;color:var(--text-mid);flex:1;}
+.period.active .period-dates{color:var(--green);}
+.period-income{font-size:14px;font-weight:600;color:var(--green);}
+.period-end{font-size:14px;font-weight:600;margin-left:4px;}
+.period-end.pos{color:var(--green);} .period-end.neg{color:var(--red);} .period-end.tight{color:var(--amber);}
+.period-toggle{font-size:12px;color:var(--text-dim);transition:transform .2s;}
+.period.open .period-toggle{transform:rotate(180deg);}
+.period-body{display:none;}
+.period.open .period-body{display:block;}
+/* Bill rows */
+.bill-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--border);transition:background .12s;}
+.bill-row:hover{background:var(--surface2);}
+.bill-row.cleared{opacity:.32;}
+.bill-row.vacation{border-left:2px solid #22c55e;}
+.bill-row.seasonal{border-left:2px solid var(--blue);}
+.bill-row.sec-hdr{background:var(--surface);cursor:default;}
+.bill-row.sec-hdr:hover{background:var(--surface);}
+.status-btn{width:22px;height:22px;border-radius:3px;border:1px solid var(--border2);background:transparent;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);color:var(--text-dim);transition:all .12s;}
+.status-btn.pending{border-color:var(--amber);background:var(--amber-dim);color:var(--amber);}
+.status-btn.cleared{border-color:var(--green-dim);background:var(--green-dim);color:var(--green);}
+.bill-day{font-size:12px;color:var(--text-dim);width:24px;flex-shrink:0;text-align:right;}
+.bill-name{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bill-name.struck{color:var(--text-dim);text-decoration:line-through;}
+.bill-name a.bill-link{color:var(--blue);text-decoration:none;border-bottom:1px dashed var(--blue-dim);}
+.bill-name a.bill-link:hover{border-bottom-color:var(--blue);}
+.bill-name.struck a.bill-link{color:var(--text-dim);text-decoration:line-through;border-bottom:none;}
+.bill-amt{font-size:14px;font-weight:500;min-width:68px;text-align:right;}
+.bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
+.bill-acts{display:flex;gap:5px;opacity:1;}
+.act-btn{font-size:16px;line-height:1;padding:5px 7px;border:none;border-radius:6px;background:transparent;cursor:pointer;opacity:1;-webkit-tap-highlight-color:transparent;}
+.act-btn:active{background:var(--hover);}
+.act-btn.del{opacity:.55;}
+.act-btn.del:active{opacity:1;}
+.sec-lbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);font-weight:600;}
+.add-input{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:4px 8px;outline:none;flex:1;}
+.add-input:focus{border-color:var(--text-dim);}
+.add-input::placeholder{color:var(--text-dim);}
+.period-footer{display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border);background:var(--surface);}
+/* Debt Collector */
+.dc-stat-row{display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface);border-radius:6px;border:1px solid var(--border);}
+.dc-avalanche{font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:5px;border:1px solid var(--border);}
+.dc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+.dc-card.maxed{border-color:var(--red-dim);}
+.dc-card.high{border-color:var(--amber-dim);}
+.dc-card-hdr{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none;}
+.dc-card-hdr:hover{background:var(--surface2);}
+.dc-card-name{font-size:15px;font-weight:600;flex:1;}
+.dc-int{font-size:13px;color:var(--amber);white-space:nowrap;}
+.dc-util{font-size:12px;padding:2px 7px;border-radius:3px;font-weight:700;}
+.dc-util.maxed{background:var(--red-dim);color:var(--red);}
+.dc-util.high{background:var(--amber-dim);color:var(--amber);}
+.dc-util.ok{background:var(--green-dim);color:var(--green);}
+.dc-bal{font-size:16px;font-weight:600;color:var(--red);}
+.dc-bar-wrap{height:4px;background:var(--border2);border-radius:0;}
+.dc-bar-fill{height:100%;transition:width .3s;}
+.dc-body{display:none;border-top:1px solid var(--border);padding:14px 16px;}
+.dc-card.open .dc-body{display:block;}
+.dc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.dc-field{display:flex;flex-direction:column;gap:3px;}
+.dc-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);}
+.dc-val{font-size:15px;font-weight:500;}
+.dc-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:5px 8px;outline:none;width:100%;}
+.dc-input:focus{border-color:var(--text-mid);}
+.dc-proj{background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:10px 12px;margin-bottom:12px;font-size:14px;}
+.dc-actions{display:flex;gap:8px;flex-wrap:wrap;}
+/* Modal */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto;}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:8px;width:100%;max-width:480px;padding:22px;}
+.modal.sm{max-width:360px;}
+.modal h2{font-size:15px;font-weight:600;margin-bottom:18px;letter-spacing:.04em;}
+.m-lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;}
+.m-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:7px 10px;outline:none;width:100%;margin-bottom:10px;}
+.m-input:focus{border-color:var(--text-mid);}
+.m-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.m-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
+.trow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
+.trow:last-child{border-bottom:none;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 </style>
 </head>
 <body>
@@ -1753,25 +1982,72 @@ function delIncomeSource(i) {
 function openManage(){S.ui_manage=true;render();renderModal();}
 function closeManage(){S.ui_manage=false;document.getElementById('modal-root').innerHTML='';render();}
 function renderModal(){
-  const rows=S.templates.map((t,i)=>
-    '<div class="trow">'+
-      '<input class="m-input" style="margin:0;flex:1;" value="'+esc(t.name)+'" onchange="updTpl('+i+',\'name\',this.value)" placeholder="Name">'+
-      '<input class="m-input" style="margin:0;width:55px;" type="number" value="'+(t.day||'')+'" onchange="updTpl('+i+',\'day\',this.value?parseInt(this.value):null)" placeholder="Day">'+
-      '<input class="m-input" style="margin:0;width:85px;" type="number" value="'+t.amount+'" onchange="updTpl('+i+',\'amount\',parseFloat(this.value)||0)" placeholder="Amt">'+
-      '<button class="btn sm danger" onclick="delTpl('+i+')">🗑️</button>'+
-    '</div>').join('');
+  const recIcons = {recurring:'🔁','one-off':'1️⃣',holiday:'🎄',annual:'📅',weekly:'⏱️'};
+  const recLabels = {recurring:'Monthly','one-off':'One-off',holiday:'Holiday',annual:'Annual',weekly:'Weekly'};
+
+  // Group templates by recurrence type
+  const grouped = {};
+  (S.templates||[]).forEach(function(t,i){
+    const rec = t.recurrence||'recurring';
+    if(!grouped[rec])grouped[rec]=[];
+    grouped[rec].push({t:t, idx:i});
+  });
+  const groupOrder = ['recurring','weekly','annual','holiday','one-off'];
+
+  // Summary stats
+  const totalPerPeriod = S.templates.reduce(function(s,t){
+    const rec=t.recurrence||'recurring';
+    if(rec==='one-off')return s;
+    if(rec==='annual'||rec==='holiday')return s+Math.round((t.amount||0)/12); // amortized monthly
+    return s+(t.amount||0);
+  },0);
+  const apCount = S.templates.filter(t=>t.autopay).length;
+
+  // Build bill cards
+  let billCards = '';
+  groupOrder.forEach(function(rec){
+    const items = grouped[rec];
+    if(!items||!items.length)return;
+    billCards += '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:6px;">'+
+        '<span>'+recIcons[rec]+'</span> <span>'+(recLabels[rec]||rec)+'</span>'+
+        '<span style="font-weight:400;opacity:.6;">('+items.length+')</span>'+
+      '</div>';
+    items.forEach(function(entry){
+      const t=entry.t, idx=entry.idx;
+      billCards += '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;margin-bottom:5px;background:var(--bg2);" onclick="navToBill(\''+esc(t.name)+'\',\''+t.id+'\')" title="Jump to this bill in your tracker">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(t.name)+'</div>'+
+          '<div style="font-size:11px;color:var(--text-dim);margin-top:1px;">'+
+            'Day '+(t.day||'—')+
+            (t.autopay?' · <span style="color:var(--amber);">⚡ AP</span>':'')+
+            (t.url?' · <a href="'+esc(t.url)+'" target="_blank" style="color:var(--accent);text-decoration:none;" onclick="event.stopPropagation();">🔗</a>':'')+
+            ((rec==='weekly'&&t.weekday!=null)?' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][t.weekday]:'')+
+          '</div>'+
+        '</div>'+
+        '<div style="font-size:14px;font-weight:700;color:var(--red);white-space:nowrap;">'+fmtD(t.amount)+'</div>'+
+        '<button class="act-btn del" onclick="event.stopPropagation();delTpl('+idx+')" title="Remove">🗑️</button>'+
+      '</div>';
+    });
+    billCards += '</div>';
+  });
+
   document.getElementById('modal-root').innerHTML=
     '<div class="modal-backdrop" onclick="if(event.target===this)closeManage()">'+
       '<div class="modal">'+
         '<h2>⚙ Settings</h2>'+
-        '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Recurring Bills</div>'+
-        '<div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Changes apply to future periods via Rebuild.</div>'+
-        '<div style="display:grid;grid-template-columns:1fr 55px 85px 32px;gap:8px;padding:0 0 5px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;"><span>Name</span><span>Day</span><span>Amount</span><span></span></div>'+
-        rows+
-        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'+
-          '<input class="m-input" id="new-tpl" placeholder="New bill  |  name : amount : day" onkeydown="if(event.key===\'Enter\')addTpl(this.value)">'+
+        '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;">Your Monthly Bills</div>'+
+        '<div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">Your recurring bill templates. Tap any bill to jump to it in your tracker, where you can edit it.</div>'+
+        '<div style="display:flex;gap:12px;margin-bottom:14px;padding:10px 12px;border:1px solid var(--border2);border-radius:8px;background:var(--bg2);">'+
+          '<div style="flex:1;text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--red);">'+fmtD(totalPerPeriod)+'</div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">per period</div></div>'+
+          '<div style="width:1px;background:var(--border);"></div>'+
+          '<div style="flex:1;text-align:center;"><div style="font-size:18px;font-weight:800;">'+S.templates.length+'</div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">bills</div></div>'+
+          '<div style="width:1px;background:var(--border);"></div>'+
+          '<div style="flex:1;text-align:center;"><div style="font-size:18px;font-weight:800;color:var(--amber);">'+apCount+'</div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">autopay</div></div>'+
         '</div>'+
-        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
+        billCards+
+        '<button class="btn" style="width:100%;margin-bottom:4px;" onclick="editTemplate(-1)">＋ Add recurring bill</button>'+
+'<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Income Sources</div>'+
           (S.incomes||[]).map(function(inc,i){
             return '<div class="trow" style="align-items:center;">'+
@@ -1787,8 +2063,7 @@ function renderModal(){
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Data &amp; Sync</div>'+
           '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
             '<button class="btn" onclick="openSyncModal()">☁ Sync settings</button>'+
-            '<button class="btn" onclick="importData()">↑ Import</button>'+
-            '<button class="btn" onclick="exportData()">↓ Export</button>'+
+            
             '<button class="btn" onclick="extendPeriods();closeManage();" title="Append another year of periods to the end">＋ Extend 1 year</button>'+
             '<button class="btn" onclick="checkForUpdate(true)">🔄 Check for updates</button>'+
           '</div>'+
@@ -1796,18 +2071,132 @@ function renderModal(){
         '</div>'+
         '<div class="m-actions">'+
           '<button class="btn" onclick="closeManage()">Close</button>'+
-          '<button class="btn primary" onclick="rebuildFuture()">↻ Rebuild Future</button>'+
         '</div>'+
       '</div>'+
     '</div>';
 }
-function updTpl(i,f,v){S.templates[i][f]=v;persist();}
-function delTpl(i){if(confirm('Remove?')){S.templates.splice(i,1);persist();renderModal();}}
-function addTpl(raw){
-  const pts=raw.split(':');const name=(pts[0]||'').trim(),amt=parseDollars(pts[1]||'0'),day=pts[2]?parseInt(pts[2].trim()):null;
-  if(!name||!amt){alert('Format: Name : Amount : Day');return;}
-  S.templates.push({id:uid(),name,day,amount:amt,active:true,category:'fixed'});
-  persist();renderModal();document.getElementById('new-tpl').value='';
+function navToBill(name, tplId) {
+  var ai = S.periods.findIndex(function(p){return p.active;});
+  var targetP = null, targetB = null;
+  for (var i=Math.max(0,ai); i<S.periods.length; i++) {
+    var b = S.periods[i].bills.find(function(bb){return bb.templateId===tplId || bb.name===name;});
+    if (b) { targetP = S.periods[i]; targetB = b; break; }
+  }
+  if (!targetP) { alert('No upcoming instance found.'); return; }
+  S.periods.forEach(function(p){ p.open = p.id===targetP.id; });
+  closeManage(); setTab('periods'); render();
+  setTimeout(function(){
+    var el = document.getElementById('bill-'+targetB.id);
+    if (el) { el.scrollIntoView({behavior:'smooth',block:'center'}); el.style.outline='2px solid var(--accent)'; setTimeout(function(){el.style.outline='';},2000); }
+    else { var pel=document.getElementById(targetP.id); if(pel) pel.scrollIntoView({behavior:'smooth',block:'start'}); }
+  }, 120);
+}
+function delTpl(i){if(confirm('Remove "'+S.templates[i].name+'" from recurring bills?')){S.templates.splice(i,1);persist();renderModal();}}
+
+function editTemplate(i) {
+  const isNew = i === -1;
+  const t = isNew ? {name:'',amount:0,day:1,recurrence:'recurring',autopay:false,url:'',weekday:null,month:null} : S.templates[i];
+  if (!t) return;
+  const rec = t.recurrence||'recurring';
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this){renderModal();}">'+
+      '<div class="modal sm"><h2>'+(isNew?'＋ Add Recurring Bill':'Edit Bill Template')+'</h2>'+
+        
+        '<span class="m-lbl">Bill name</span>'+
+        '<input class="m-input" id="et-name" value="'+esc(t.name)+'" placeholder="e.g. Rent">'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+          '<div><span class="m-lbl">Amount ($)</span><input class="m-input" id="et-amount" type="number" min="0" step="1" value="'+(t.amount||'')+'"></div>'+
+          '<div><span class="m-lbl">Due day (1-31)</span><input class="m-input" id="et-day" type="number" min="1" max="31" value="'+(t.day||'')+'"></div>'+
+        '</div>'+
+        '<span class="m-lbl">Repeats</span>'+
+        '<select class="m-input" id="et-rec" onchange="document.getElementById(\'et-weekday-wrap\').style.display=this.value===\'weekly\'?\'\':\'none\';document.getElementById(\'et-month-wrap\').style.display=(this.value===\'annual\'||this.value===\'holiday\')?\'\':\'none\';">'+
+          '<option value="recurring"'+(rec==='recurring'?' selected':'')+'>🔁 Recurring (every period)</option>'+
+          '<option value="weekly"'+(rec==='weekly'?' selected':'')+'>⏱️ Weekly</option>'+
+          '<option value="annual"'+(rec==='annual'?' selected':'')+'>📅 Annual (once/year)</option>'+
+          '<option value="holiday"'+(rec==='holiday'?' selected':'')+'>🎄 Holiday (once/year)</option>'+
+        '</select>'+
+        '<div id="et-weekday-wrap" style="'+(rec==='weekly'?'':'display:none;')+'margin-top:4px;">'+
+          '<span class="m-lbl">Which day of the week?</span>'+
+          '<select class="m-input" id="et-weekday">'+
+            ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'].map(function(d,di){return '<option value="'+di+'"'+((t.weekday||0)===di?' selected':'')+'>'+d+'</option>';}).join('')+
+          '</select>'+
+        '</div>'+
+        '<div id="et-month-wrap" style="'+((rec==='annual'||rec==='holiday')?'':'display:none;')+'margin-top:4px;">'+
+          '<span class="m-lbl">Which month?</span>'+
+          '<select class="m-input" id="et-month">'+
+            ['January','February','March','April','May','June','July','August','September','October','November','December'].map(function(m,mi){return '<option value="'+mi+'"'+((t.month||0)===mi?' selected':'')+'>'+m+'</option>';}).join('')+
+          '</select>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">'+
+          '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+            '<input type="checkbox" id="et-autopay" '+(t.autopay?'checked':'')+' style="accent-color:var(--amber);width:15px;height:15px;">'+
+            '<span>⚡ Autopay</span>'+
+          '</label>'+
+          '<div></div>'+
+        '</div>'+
+        '<span class="m-lbl" style="margin-top:8px;">Link (optional)</span>'+
+        '<input class="m-input" id="et-url" value="'+esc(t.url||'')+'" placeholder="https://pay.example.com">'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="renderModal()">Cancel</button>'+
+          '<button class="btn primary" data-i="'+i+'" onclick="saveTemplate(parseInt(this.dataset.i))">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById(isNew?'et-name':'et-amount');if(el){el.focus();if(!isNew)el.select();}},50);
+}
+
+function saveTemplate(i) {
+  const isNew = i === -1;
+  const name=(document.getElementById('et-name')?.value||'').trim();
+  const amt=parseFloat(document.getElementById('et-amount')?.value);
+  const day=parseInt(document.getElementById('et-day')?.value);
+  const rec=document.getElementById('et-rec')?.value||'recurring';
+  const ap=!!document.getElementById('et-autopay')?.checked;
+  const url=(document.getElementById('et-url')?.value||'').trim();
+  const weekday=parseInt(document.getElementById('et-weekday')?.value);
+  const month=parseInt(document.getElementById('et-month')?.value);
+  if(!name){alert('Give it a name.');return;}
+  if(isNaN(amt)||amt<0){alert('Enter an amount.');return;}
+  if(isNaN(day)||day<1||day>31){alert('Due day must be 1-31.');return;}
+  const tpl = isNew ? {id:uid()} : S.templates[i];
+  if(!tpl)return;
+  tpl.name=name; tpl.amount=Math.round(amt); tpl.day=day; tpl.recurrence=rec;
+  tpl.autopay=ap; tpl.url=url;
+  tpl.weekday=(rec==='weekly'&&!isNaN(weekday))?weekday:null;
+  tpl.month=((rec==='annual'||rec==='holiday')&&!isNaN(month))?month:null;
+  if(isNew) S.templates.push(tpl);
+  // Auto-propagate to future periods
+  const ai=S.periods.findIndex(p=>p.active);
+  if(!isNew){
+    S.periods.forEach(function(p,pi){
+      if(pi<=ai)return;
+      p.bills.forEach(function(b){
+        if(b.templateId===tpl.id&&b.status!=='cleared'){
+          b.name=tpl.name;b.amount=tpl.amount;b.day=tpl.day;b.autopay=tpl.autopay;b.url=tpl.url;
+          b.recurrence=tpl.recurrence;
+          if(tpl.autopay&&b.status==='upcoming')b.status='pending';
+        }
+      });
+    });
+  } else {
+    // New template: inject into future periods where due
+    S.periods.forEach(function(p,pi){
+      if(pi<=ai)return;
+      if(billDueInPeriod(tpl.day,p.startDate,p.endDate)){
+        if((rec==='annual'||rec==='holiday')&&tpl.month!=null){
+          const s=new Date(p.startDate+'T00:00:00'),e=new Date(p.endDate+'T00:00:00');
+          const due=new Date(s.getFullYear(),tpl.month,Math.min(tpl.day,28));
+          const due2=new Date(s.getFullYear()+1,tpl.month,Math.min(tpl.day,28));
+          if(!((due>=s&&due<=e)||(due2>=s&&due2<=e)))return;
+        }
+        p.bills.push({id:uid(),templateId:tpl.id,name:tpl.name,amount:tpl.amount,day:tpl.day,
+          status:tpl.autopay?'pending':'upcoming',category:tpl.recurrence==='annual'||tpl.recurrence==='holiday'?'annual':'fixed',
+          tag:'',url:tpl.url||'',autopay:!!tpl.autopay,recurrence:tpl.recurrence||'recurring'});
+        p.bills.sort((a,c)=>(a.day||99)-(c.day||99));
+      }
+    });
+  }
+  persist(); renderModal(); render();
 }
 function rebuildFuture(){
   if(!confirm('Rebuild future periods from your bill templates? One-off bills are kept.'))return;
@@ -2745,7 +3134,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-10-A";
+var HEATH_BUILD="2026-07-10-E";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
