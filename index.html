@@ -1523,6 +1523,95 @@ function advancePeriod(){
 }
 
 // ═══ MANAGE BILLS MODAL ═══
+// ── Income source manager (post-setup) ──
+function editIncomeSource(i) {
+  const isNew = i === -1;
+  const inc = isNew ? {name:'', type:'fixed', amount:0, rate:0, typicalHours:0, placeholderAvg:0} : S.incomes[i];
+  if (!inc) return;
+  const hourly = inc.type==='hourly';
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal sm"><h2>'+(isNew?'＋ New Income Source':'Edit Income')+'</h2>'+
+        '<span class="m-lbl">Name</span>'+
+        '<input class="m-input" id="is-name" value="'+esc(inc.name)+'" placeholder="e.g. Emma\'s Paycheck">'+
+        '<span class="m-lbl">Type</span>'+
+        '<select class="m-input" id="is-type" onchange="document.getElementById(\'is-fixed-wrap\').style.display=this.value===\'fixed\'?\'\':\'none\';document.getElementById(\'is-hourly-wrap\').style.display=this.value===\'hourly\'?\'\':\'none\';">'+
+          '<option value="fixed"'+(!hourly?' selected':'')+'>💼 Fixed (salary)</option>'+
+          '<option value="hourly"'+(hourly?' selected':'')+'>⏱️ Variable (hourly)</option>'+
+        '</select>'+
+        '<div id="is-fixed-wrap" style="'+(hourly?'display:none;':'')+'">'+
+          '<span class="m-lbl">Take-home per paycheck ($)</span>'+
+          '<input class="m-input" id="is-amount" type="number" min="0" step="1" value="'+(inc.amount||'')+'">'+
+        '</div>'+
+        '<div id="is-hourly-wrap" style="'+(hourly?'':'display:none;')+'">'+
+          '<span class="m-lbl">Typical paycheck (take-home, $)</span>'+
+          '<input class="m-input" id="is-typical" type="number" min="0" step="1" value="'+(inc.typicalPay||(inc.rate&&inc.typicalHours?Math.round(inc.rate*inc.typicalHours):'')||'')+'">'+
+          '<span class="m-lbl">Typical hours per paycheck</span>'+
+          '<input class="m-input" id="is-hours" type="number" min="0" step="0.5" value="'+(inc.typicalHours||'')+'">'+
+          '<span class="m-lbl">Placeholder average per period ($)</span>'+
+          '<input class="m-input" id="is-avg" type="number" min="0" step="1" value="'+(inc.placeholderAvg||'')+'">'+
+          ((inc.rateHistory||[]).length>=2?'<div style="font-size:11px;color:var(--text-dim);margin:-4px 0 10px;">Calibrated rate from real paychecks: ~'+fmtD(effectiveRate(inc))+'/hr ('+(inc.rateHistory||[]).length+' data points). Saving new typicals resets calibration.</div>':'')+
+        '</div>'+
+        '<div class="m-actions">'+
+          '<button class="btn" onclick="closeModal()">Cancel</button>'+
+          '<button class="btn primary" data-i="'+i+'" onclick="saveIncomeSource(parseInt(this.dataset.i))">Save</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var el=document.getElementById('is-name');if(el&&isNew)el.focus();},50);
+}
+function saveIncomeSource(i) {
+  const isNew = i === -1;
+  const name=(document.getElementById('is-name')?.value||'').trim();
+  const type=document.getElementById('is-type')?.value||'fixed';
+  if(!name){alert('Give it a name.');return;}
+  let inc = isNew ? {id:uid(), rateHistory:[]} : S.incomes[i];
+  if(!inc)return;
+  const prevType = inc.type;
+  inc.name=name; inc.type=type;
+  if(type==='fixed'){
+    const amt=parseFloat(document.getElementById('is-amount')?.value);
+    inc.amount=isNaN(amt)?0:Math.round(amt);
+    inc.rate=0; inc.placeholderAvg=0;
+  } else {
+    const pay=parseFloat(document.getElementById('is-typical')?.value);
+    const hrs=parseFloat(document.getElementById('is-hours')?.value);
+    const avg=parseFloat(document.getElementById('is-avg')?.value);
+    if(isNaN(pay)||isNaN(hrs)||hrs<=0){alert('Typical paycheck and hours are required for hourly.');return;}
+    const newRate=pay/hrs;
+    // If typicals changed meaningfully, reset calibration to the new baseline
+    if(Math.abs(newRate-(inc.rate||0))>0.01){ inc.rateHistory=[]; }
+    inc.rate=newRate;
+    inc.typicalHours=hrs;
+    inc.placeholderAvg=isNaN(avg)?Math.round(pay):Math.round(avg);
+    inc.amount=0;
+  }
+  if(isNew){
+    S.incomes.push(inc);
+    // Add an entry for this source to the active period and all future ones
+    const ai=S.periods.findIndex(p=>p.active);
+    S.periods.forEach(function(p,pi){
+      if(pi>=Math.max(0,ai)){
+        if(!p.incomeEntries)p.incomeEntries=[];
+        if(!p.incomeEntries.find(e=>e.incomeId===inc.id)){
+          p.incomeEntries.push({incomeId:inc.id, hours:null, actual:null, cleared:false});
+        }
+      }
+    });
+  }
+  persist(); closeModal(); render(); if(S.ui_manage)renderModal();
+}
+function delIncomeSource(i) {
+  const inc=S.incomes[i]; if(!inc)return;
+  if(!confirm('Remove "'+inc.name+'"? Its rows disappear from all periods (past actuals in your balance are untouched).'))return;
+  const id=inc.id;
+  S.incomes.splice(i,1);
+  S.periods.forEach(function(p){
+    if(p.incomeEntries)p.incomeEntries=p.incomeEntries.filter(e=>e.incomeId!==id);
+  });
+  persist(); render(); if(S.ui_manage)renderModal();
+}
+
 function openManage(){S.ui_manage=true;render();renderModal();}
 function closeManage(){S.ui_manage=false;document.getElementById('modal-root').innerHTML='';render();}
 function renderModal(){
@@ -1543,6 +1632,18 @@ function renderModal(){
         rows+
         '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'+
           '<input class="m-input" id="new-tpl" placeholder="New bill  |  name : amount : day" onkeydown="if(event.key===\'Enter\')addTpl(this.value)">'+
+        '</div>'+
+        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Income Sources</div>'+
+          (S.incomes||[]).map(function(inc,i){
+            return '<div class="trow" style="align-items:center;">'+
+              '<span style="flex:1;font-size:13px;">'+(inc.type==='hourly'?'⏱️':'💼')+' '+esc(inc.name)+
+              ' <span style="font-size:11px;color:var(--text-dim);">'+(inc.type==='hourly'?('~'+fmtD(effectiveRate(inc))+'/hr'+((inc.rateHistory||[]).length>=2?' · calibrated':'')):fmtD(inc.amount||0)+'/check')+'</span></span>'+
+              '<button class="act-btn" onclick="editIncomeSource('+i+')">✏️</button>'+
+              '<button class="act-btn del" onclick="delIncomeSource('+i+')">🗑️</button>'+
+            '</div>';
+          }).join('')+
+          '<button class="btn" style="margin-top:6px;" onclick="editIncomeSource(-1)">＋ Add income source</button>'+
         '</div>'+
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Data &amp; Sync</div>'+
@@ -2460,7 +2561,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-09-A";
+var HEATH_BUILD="2026-07-09-B";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
