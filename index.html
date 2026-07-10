@@ -207,7 +207,8 @@ body.theme-rust { --bg:#120c0a; --bg2:#1e1410; --text:#e8d8d0; --text-mid:#b8908
     </div>
     <div id="hdr-stats" class="hdr-stats"></div>
     <div class="hdr-actions">
-      <button class="btn" onclick="openManage()" title="Settings — bills, sync, import/export">⚙</button>
+      <button class="btn" onclick="heathUndo()" title="Undo last change" style="font-size:14px;">↩</button>
+      <button class="btn" onclick="openManage()" title="Settings">⚙</button>
     </div>
   </div>
   <div id="timeline-strip-wrap"></div>
@@ -871,7 +872,20 @@ function buildIncomeEntriesForPeriod(p) {
 }
 
 // ═══ STORAGE ═══
-function persist() { localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies})); }
+var _undoStack=[], _undoMax=10;
+function _snap(){return JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies});}
+function persist() {
+  var s=_snap();
+  if(!_undoStack.length||_undoStack[_undoStack.length-1]!==s){_undoStack.push(s);if(_undoStack.length>_undoMax)_undoStack.shift();}
+  localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies}));
+}
+function heathUndo() {
+  if(_undoStack.length<2){alert('Nothing to undo.');return;}
+  _undoStack.pop();var prev=_undoStack[_undoStack.length-1];var d=JSON.parse(prev);
+  S.balance=d.balance;S.templates=d.templates||[];S.periods=d.periods||[];
+  S.subtitle=d.subtitle||'';S.settings=d.settings||S.settings;S.incomes=d.incomes||[];S.piggies=d.piggies||[];
+  localStorage.setItem(STORAGE_KEY,prev);render();
+}
 function dcPersist() { localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards})); }
 
 function loadStorage() {
@@ -1317,7 +1331,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
       '<div class="bill-day">'+(b.day||'~')+'</div>'+
       '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+'</div>'+
       '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(b.amount))+'</div>'+
-      '<div class="bill-acts"><button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
+      '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
 
   if(fixed.length){html+='<div class="bill-row sec-hdr" style="padding:3px 14px;"><div class="sec-lbl" style="font-size:10px;color:var(--text-dim);">FIXED</div></div>';fixed.forEach(b=>html+=billRow(b));}
@@ -1425,7 +1439,30 @@ function editBal(){const d=document.getElementById('bal-display'),i=document.get
 function saveBal(){const i=document.getElementById('bal-input'),v=parseDollars(i.value);S.balance=isNaN(v)?S.balance:v;document.getElementById('bal-display').style.display='';i.style.display='none';persist();render();}
 function togglePeriod(id){const p=S.periods.find(pp=>pp.id===id);if(p)p.open=!p.open;persist();render();}
 function setActivePeriod(id){S.periods.forEach(p=>{p.active=p.id===id;if(p.active)p.open=true;});persist();render();}
-function cycleStatus(pid,bid){const p=S.periods.find(pp=>pp.id===pid);if(!p)return;const b=p.bills.find(bb=>bb.id===bid);if(!b)return;const c=['upcoming','pending','cleared'];b.status=c[(c.indexOf(b.status)+1)%c.length];persist();render();}
+function stampHistory(b, action) {
+  if(!b._history)b._history=[];
+  b._history.push({who:localStorage.getItem('heath_username')||'?',when:Date.now(),action:action});
+  if(b._history.length>5)b._history=b._history.slice(-5);
+}
+function fmtHistoryTime(ts) {
+  var d=new Date(ts),now=new Date(),diff=now-d;
+  if(diff<60000)return 'just now';
+  if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function toggleHistoryTip(el) {
+  var existing=el.parentElement.querySelector('.hist-tip');
+  if(existing){existing.remove();return;}
+  var tip=document.createElement('div');
+  tip.className='hist-tip';
+  tip.style.cssText='position:absolute;right:0;top:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text-mid);white-space:nowrap;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15);';
+  tip.textContent=el.title;
+  el.parentElement.style.position='relative';
+  el.parentElement.appendChild(tip);
+  setTimeout(function(){tip.remove();},3000);
+}
+function cycleStatus(pid,bid){const p=S.periods.find(pp=>pp.id===pid);if(!p)return;const b=p.bills.find(bb=>bb.id===bid);if(!b)return;const c=['upcoming','pending','cleared'];b.status=c[(c.indexOf(b.status)+1)%c.length];stampHistory(b,b.status);persist();render();}
 function delBill(pid,bid){
   const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
   const b=p.bills.find(bb=>bb.id===bid);
@@ -1580,6 +1617,7 @@ function saveEditBill(pid,bid){
       return;
     }
   }
+  stampHistory(b,'edited');
   persist();closeModal();render();
 }
 var _pendingRipple=null;
@@ -2048,6 +2086,11 @@ function renderModal(){
         billCards+
         '<button class="btn" style="width:100%;margin-bottom:4px;" onclick="editTemplate(-1)">＋ Add recurring bill</button>'+
 '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Your Name</div>'+
+          '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Shown in change history so you and your partner know who edited what.</div>'+
+          '<input class="m-input" style="margin-bottom:0;max-width:220px;" value="'+esc(localStorage.getItem('heath_username')||'')+'" placeholder="e.g. Emma" onchange="localStorage.setItem(\'heath_username\',this.value.trim())">'+
+        '</div>'+
+        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Income Sources</div>'+
           (S.incomes||[]).map(function(inc,i){
             return '<div class="trow" style="align-items:center;">'+
@@ -2058,6 +2101,10 @@ function renderModal(){
             '</div>';
           }).join('')+
           '<button class="btn" style="margin-top:6px;" onclick="editIncomeSource(-1)">＋ Add income source</button>'+
+        '</div>'+
+        '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
+          '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Theme</div>'+
+          (function(){var themes=[['','Terminal','#22c55e'],['theme-emerald','Emerald','#34d399'],['theme-ocean','Ocean','#38bdf8'],['theme-lavender','Lavender','#a78bfa'],['theme-midnight','Midnight','#818cf8'],['theme-rust','Rust','#fb923c']];var cur=localStorage.getItem('heath_theme')||'';return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">'+themes.map(function(th){var active=cur===th[0];return '<button onclick="document.body.className=\''+th[0]+'\';localStorage.setItem(\'heath_theme\',\''+th[0]+'\')" style="padding:5px 10px;border-radius:8px;border:1.5px solid '+(active?th[2]:'var(--border2)')+';background:'+(active?'var(--bg2)':'transparent')+';color:var(--text);font-size:11px;font-weight:'+(active?'700':'400')+';cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:'+th[2]+';"></span>'+th[1]+'</button>';}).join('')+'</div>';})() +
         '</div>'+
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Data &amp; Sync</div>'+
@@ -2928,6 +2975,7 @@ function wzFinish(withSync) {
   }
 }
 
+(function(){var th=localStorage.getItem('heath_theme');if(th)document.body.className=th;})();
 loadStorage();
 migrateToV3();
 if (wzShouldShow()) { wzStart(); }
@@ -3092,7 +3140,11 @@ function openSyncModal(){
       '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
         (SYNC.cfg?'<button class="btn danger" onclick="syncDisconnect()">Disconnect</button>':'')+
         '<div style="flex:1;"></div>'+
-        '<button class="btn" onclick="closeModal()">Close</button>'+
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">'+
+            '<div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Advanced</div>'+
+            '<div style="display:flex;gap:6px;"><button class="btn" style="font-size:12px;" onclick="importData()">↑ Import JSON</button><button class="btn" style="font-size:12px;" onclick="exportData()">↓ Export JSON</button></div>'+
+          '</div>'+
+          '<button class="btn" onclick="closeModal()">Close</button>'+
         '<button class="btn primary" onclick="syncSaveAndConnect()">Save & Connect</button>'+
       '</div>'+
     '</div></div>';
@@ -3134,7 +3186,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-10-E";
+var HEATH_BUILD="2026-07-10-F";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
