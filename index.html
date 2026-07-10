@@ -2596,27 +2596,31 @@ function syncSetStatus(s,msg){
   el.style.background=m[0];el.title=m[1];
 }
 function syncApplyRemote(v){
-  // Guard: never let a thin/empty remote snapshot silently wipe out rich local data
-  // (e.g. a fresh device or a race on first connect pushing an empty ledger up).
+  // Guard: never let a thin/empty FIELD in a remote snapshot silently wipe out a
+  // real local field (e.g. a stale push that lost incomes but still has bills) —
+  // checked independently per field, not as one aggregate empty/non-empty check.
   var remoteBillCount=(v.periods||[]).reduce(function(n,p){return n+((p.bills||[]).length);},0);
-  var remoteHasData=(v.templates||[]).length>0 || (v.incomes||[]).length>0 || remoteBillCount>0;
   var localBillCount=(S.periods||[]).reduce(function(n,p){return n+((p.bills||[]).length);},0);
-  var localHasData=(S.templates||[]).length>0 || (S.incomes||[]).length>0 || localBillCount>0;
-  if(!remoteHasData && localHasData){
-    syncSetStatus('error','Remote copy looks empty — kept local data and pushed it up instead.');
+  var keepLocalTemplates=(!v.templates||!v.templates.length)&&(S.templates||[]).length>0;
+  var keepLocalIncomes=(!v.incomes||!v.incomes.length)&&(S.incomes||[]).length>0;
+  var keepLocalPiggies=(!v.piggies||!v.piggies.length)&&(S.piggies||[]).length>0;
+  var keepLocalPeriods=(!v.periods||!v.periods.length||remoteBillCount===0)&&localBillCount>0;
+  var anyKept=keepLocalTemplates||keepLocalIncomes||keepLocalPiggies||keepLocalPeriods;
+  if(anyKept){
+    syncSetStatus('error','Remote copy looked incomplete — kept local data for the affected fields and pushed it up.');
     syncPushNow();
-    return;
+    if(keepLocalTemplates&&keepLocalIncomes&&keepLocalPiggies&&keepLocalPeriods)return; // nothing usable in remote at all
   }
   SYNC.applying=true;
   try{
     if(v.balance!==undefined)S.balance=v.balance;
-    S.templates=v.templates||[];
-    S.periods=(v.periods||[]).map(function(p){if(!p.bills)p.bills=[];if(!p.additionalIncome)p.additionalIncome=[];if(!p.incomeEntries)p.incomeEntries=[];return p;});
+    if(!keepLocalTemplates)S.templates=v.templates||[];
+    if(!keepLocalPeriods)S.periods=(v.periods||[]).map(function(p){if(!p.bills)p.bills=[];if(!p.additionalIncome)p.additionalIncome=[];if(!p.incomeEntries)p.incomeEntries=[];return p;});
     DC.cards=v.dc||[];
     S.subtitle=v.subtitle||'';
     if(v.settings)S.settings=Object.assign({periodLength:14,anchorDate:null,setupComplete:false},v.settings);
-    S.incomes=v.incomes||[];
-    S.piggies=v.piggies||[];
+    if(!keepLocalIncomes)S.incomes=v.incomes||[];
+    if(!keepLocalPiggies)S.piggies=v.piggies||[];
     SYNC.localStamp=v.updatedAt||Date.now();
     localStorage.setItem('heath_sync_stamp',String(SYNC.localStamp));
     localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies}));
