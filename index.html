@@ -1790,6 +1790,7 @@ function renderModal(){
             '<button class="btn" onclick="importData()">↑ Import</button>'+
             '<button class="btn" onclick="exportData()">↓ Export</button>'+
             '<button class="btn" onclick="extendPeriods();closeManage();" title="Append another year of periods to the end">＋ Extend 1 year</button>'+
+            '<button class="btn" onclick="checkForUpdate(true)">🔄 Check for updates</button>'+
           '</div>'+
           '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">'+S.periods.length+' periods · '+(periodLen()===7?'weekly':'bi-weekly')+' · through '+(S.periods.length?new Date(S.periods[S.periods.length-1].endDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'}):'—')+' · build '+HEATH_BUILD+'</div>'+
         '</div>'+
@@ -2744,14 +2745,15 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-09-E";
-function checkForUpdate(){
+var HEATH_BUILD="2026-07-10-A";
+function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
       var m=txt.match(/HEATH_BUILD="([^"]+)"/);
       if(m&&m[1]!==HEATH_BUILD)showUpdateBanner();
-    }).catch(function(){});
-  }catch(e){}
+      else if(manual)alert('You\'re on the latest version (build '+HEATH_BUILD+').');
+    }).catch(function(){if(manual)alert('Couldn\'t check for updates — check your connection and try again.');});
+  }catch(e){if(manual)alert('Couldn\'t check for updates — check your connection and try again.');}
 }
 function showUpdateBanner(){
   if(document.getElementById('upd-banner'))return;
