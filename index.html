@@ -147,7 +147,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 /* Debt Collector */
 .dc-stat-row{display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface);border-radius:6px;border:1px solid var(--border);}
 .dc-avalanche{font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:5px;border:1px solid var(--border);}
-.dc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
+.dc-cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;align-items:start;margin-top:12px;}
+.dc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.dc-strategy{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:4px;}
+.dc-strat-btn{padding:7px 14px;border-radius:8px;border:1.5px solid var(--border2);background:transparent;color:var(--text-mid);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;}
+.dc-strat-btn.active{border-color:var(--green);color:var(--green);background:var(--surface2);}
 .dc-card.maxed{border-color:var(--red-dim);}
 .dc-card.high{border-color:var(--amber-dim);}
 .dc-card-hdr{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none;}
@@ -185,11 +189,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .trow:last-child{border-bottom:none;}
 ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 
-body.theme-emerald { --bg:#0a0f0a; --bg2:#111a11; --text:#d4e8d4; --text-mid:#8ab88a; --text-dim:#5a7a5a; --accent:#34d399; --green:#22c55e; --border:#1a2e1a; --border2:#254025; --hover:rgba(52,211,153,.08); --red:#ef4444; --amber:#f59e0b; }
-body.theme-ocean { --bg:#0a0d14; --bg2:#101824; --text:#c8d8e8; --text-mid:#7a9ab8; --text-dim:#4a6a88; --accent:#38bdf8; --green:#22d3ee; --border:#152030; --border2:#1e3048; --hover:rgba(56,189,248,.08); --red:#f87171; --amber:#fbbf24; }
-body.theme-lavender { --bg:#0e0a14; --bg2:#18122a; --text:#d8cee8; --text-mid:#a090c0; --text-dim:#6a5a8a; --accent:#a78bfa; --green:#a3e635; --border:#201838; --border2:#2e2448; --hover:rgba(167,139,250,.08); --red:#fb7185; --amber:#fbbf24; }
-body.theme-midnight { --bg:#08080c; --bg2:#111118; --text:#e0e0e8; --text-mid:#8888a0; --text-dim:#555568; --accent:#818cf8; --green:#4ade80; --border:#1a1a28; --border2:#252538; --hover:rgba(129,140,248,.08); --red:#f87171; --amber:#fbbf24; }
-body.theme-rust { --bg:#120c0a; --bg2:#1e1410; --text:#e8d8d0; --text-mid:#b89080; --text-dim:#886858; --accent:#fb923c; --green:#84cc16; --border:#2a1a14; --border2:#3a2820; --hover:rgba(251,146,60,.08); --red:#ef4444; --amber:#fbbf24; }
+/* ═══ THEMES ═══ */
+body.theme-emerald { --bg:#071008; --surface:#0e1a10; --surface2:#152418; --border:#1d3320; --border2:#28442c; --green:#34d399; --green-dim:#14532d; --red:#f87171; --red-dim:#7f1d1d; --amber:#fbbf24; --amber-dim:#78350f; --blue:#5eead4; --blue-dim:#134e4a; --text:#e7f6ea; --text-mid:#a7cbad; --text-dim:#6b8a70; }
+body.theme-ocean { --bg:#070d16; --surface:#0d1624; --surface2:#132033; --border:#1b2c45; --border2:#254060; --green:#38bdf8; --green-dim:#0c4a6e; --red:#fb7185; --red-dim:#881337; --amber:#fbbf24; --amber-dim:#78350f; --blue:#7dd3fc; --blue-dim:#075985; --text:#e4eef8; --text-mid:#a3bcd4; --text-dim:#61799a; }
+body.theme-lavender { --bg:#0d0916; --surface:#161026; --surface2:#1e1734; --border:#2b2148; --border2:#3a2d60; --green:#a78bfa; --green-dim:#4c1d95; --red:#fb7185; --red-dim:#881337; --amber:#fbbf24; --amber-dim:#78350f; --blue:#c4b5fd; --blue-dim:#5b21b6; --text:#ece6f8; --text-mid:#b8a9d9; --text-dim:#7a6a9e; }
+body.theme-midnight { --bg:#060608; --surface:#0f0f14; --surface2:#16161e; --border:#22222e; --border2:#2e2e40; --green:#818cf8; --green-dim:#3730a3; --red:#f87171; --red-dim:#7f1d1d; --amber:#fbbf24; --amber-dim:#78350f; --blue:#a5b4fc; --blue-dim:#4338ca; --text:#e8e8f0; --text-mid:#a8a8c0; --text-dim:#66667e; }
+body.theme-rust { --bg:#100a07; --surface:#1c120c; --surface2:#281a12; --border:#3a2618; --border2:#4e3320; --green:#fb923c; --green-dim:#7c2d12; --red:#ef4444; --red-dim:#7f1d1d; --amber:#facc15; --amber-dim:#713f12; --blue:#fdba74; --blue-dim:#9a3412; --text:#f5e8de; --text-mid:#cbab94; --text-dim:#8a6f5c; }
+/* ── LIGHT THEMES — complete look change ── */
+body.theme-paper { --bg:#f6f1e7; --surface:#fdfaf3; --surface2:#efe7d7; --border:#ddd2bc; --border2:#c9bb9e; --green:#15803d; --green-dim:#d3ecd9; --red:#b91c1c; --red-dim:#fbdada; --amber:#b45309; --amber-dim:#fdeecb; --blue:#1d4ed8; --blue-dim:#dbe7fd; --text:#2b2417; --text-mid:#5c5240; --text-dim:#8f8672; }
+body.theme-daylight { --bg:#f4f7fb; --surface:#ffffff; --surface2:#e9eef6; --border:#d5deec; --border2:#b9c8dc; --green:#047857; --green-dim:#d1f2e5; --red:#dc2626; --red-dim:#fde2e2; --amber:#b45309; --amber-dim:#fef0cd; --blue:#2563eb; --blue-dim:#dbe7fe; --text:#16202e; --text-mid:#44546a; --text-dim:#7d8ba0; }
+body.theme-mint { --bg:#eef7f0; --surface:#ffffff; --surface2:#dfeee3; --border:#c4ddca; --border2:#a3c9ac; --green:#059669; --green-dim:#ccf1e2; --red:#dc2626; --red-dim:#fde2e2; --amber:#a16207; --amber-dim:#fdf1c7; --blue:#0d9488; --blue-dim:#cbf3ee; --text:#122419; --text-mid:#3d5c47; --text-dim:#6f8f79; }
 </style>
 </head>
 <body>
@@ -199,231 +208,7 @@ body.theme-rust { --bg:#120c0a; --bg2:#1e1410; --text:#e8d8d0; --text-mid:#b8908
       <div class="app-title"><span id="app-title-text">Heath</span> <span id="sync-dot" title="Sync off — click ☁ Sync to set up" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim);margin-left:6px;vertical-align:middle;cursor:pointer;" onclick="openSyncModal()"></span></div>
       <div class="bal-wrap">
         <div class="bal-lbl">Balance</div>
-        <div id="bal-display" class="bal-display" onclick="editBal()">$0</div>
-        <input id="bal-input" class="bal-input" type="text" style="display:none"
-          onblur="saveBal()" onkeydown="if(event.key==='Enter')saveBal()">
-        <div id="bal-side" class="bal-side"></div>
-      </div>
-    </div>
-    <div id="hdr-stats" class="hdr-stats"></div>
-    <div class="hdr-actions">
-      <button class="btn" onclick="heathUndo()" title="Undo last change" style="font-size:14px;">↩</button>
-      <button class="btn" onclick="openManage()" title="Settings">⚙</button>
-    </div>
-  </div>
-  <div id="timeline-strip-wrap"></div>
-</div>
-
-<div class="main-wrap">
-  <div class="tab-bar">
-    <button class="tab-btn active" id="tab-btn-periods" onclick="setTab('periods')">Pay Periods</button>
-    <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
-    <button class="tab-btn" id="tab-btn-piggy" onclick="setTab('piggy')">🐷 Piggy Bank</button>
-  </div>
-  <div id="tab-periods"></div>
-  <div id="tab-debt" style="display:none"></div>
-  <div id="tab-piggy" style="display:none"></div>
-</div>
-<div id="modal-root"></div>
-<div id="wizard-root"></div>
-
-
-</body>
-</html>html+='<div id="'+billElId+'" class="bill-row="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Heath</title>
-<link rel="icon" href="data:,">
-<meta name="theme-color" content="#0e0f0e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Heath">
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg:#0e0f0e; --surface:#161817; --surface2:#1e201e;
-  --border:#2a2d2a; --border2:#333633;
-  --green:#4ade80; --green-dim:#22543d;
-  --red:#f87171; --red-dim:#7f1d1d;
-  --amber:#fbbf24; --amber-dim:#78350f;
-  --blue:#60a5fa; --blue-dim:#1e3a5f;
-  --text:#f5f7f5; --text-mid:#bcc4bc; --text-dim:#7f8c7f;
-  --mono:'IBM Plex Mono',monospace;
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15px;line-height:1.5;}
-/* Header */
-.hdr{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:12px 20px;}
-.hdr-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
-.app-title{font-size:12px;color:var(--text-dim);letter-spacing:.15em;text-transform:uppercase;}
-.bal-wrap{display:flex;align-items:center;gap:8px;margin-top:2px;}
-.bal-side{display:flex;flex-direction:column;gap:5px;margin-left:12px;padding-left:14px;border-left:1px solid var(--border2);}
-.bal-side .stat-val{font-size:14px;}
-.bal-lbl{font-size:12px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;}
-.bal-display{font-size:32px;font-weight:600;color:var(--green);cursor:pointer;border-bottom:1px dashed var(--green-dim);}
-.bal-input{font-family:var(--mono);font-size:32px;font-weight:600;color:var(--green);background:transparent;border:none;border-bottom:1px solid var(--green);outline:none;width:180px;}
-.hdr-stats{display:flex;gap:20px;margin-top:6px;flex-wrap:wrap;}
-.stat{display:flex;flex-direction:column;gap:1px;}
-.stat-lbl{font-size:11px;color:var(--text-dim);letter-spacing:.12em;text-transform:uppercase;}
-.stat-val{font-size:15px;font-weight:600;}
-.stat-val.pos{color:var(--green);} .stat-val.neg{color:var(--red);} .stat-val.amber{color:var(--amber);} .stat-val.neu{color:var(--text-mid);}
-.hdr-actions{display:flex;gap:8px;align-items:center;padding-top:4px;}
-/* Buttons */
-.btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.06em;padding:5px 11px;border-radius:4px;border:1px solid var(--border2);background:var(--surface2);color:var(--text-mid);cursor:pointer;transition:all .15s;}
-.btn:hover{border-color:var(--text-dim);color:var(--text);}
-.btn.primary{border-color:var(--green-dim);color:var(--green);background:#0d2218;}
-.btn.primary:hover{background:#0f2d1d;border-color:var(--green);}
-.btn.danger{border-color:var(--red-dim);color:var(--red);background:#1f0a0a;}
-.btn.danger:hover{background:#2a0d0d;}
-.btn.sm{padding:3px 8px;font-size:12px;}
-/* Tabs */
-.tab-bar{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--border);}
-.tab-btn{font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;padding:8px 14px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);cursor:pointer;transition:all .15s;}
-.tab-btn.active{color:var(--green);border-bottom-color:var(--green);}
-.tab-btn:hover:not(.active){color:var(--text-mid);}
-/* Main wrapper */
-.main-wrap{max-width:780px;margin:0 auto;padding:16px 16px 80px;}
-#timeline-strip-wrap{width:calc(100% + 40px);margin:10px -20px -12px;background:var(--bg);border-top:1px solid var(--border);padding-bottom:1px;}
-.add-grid{display:grid;grid-template-columns:1fr 120px auto;gap:8px;align-items:end;}
-.add-grid.bill{grid-template-columns:1fr 110px 70px auto;}
-
-/* ═══ MOBILE (phones) ═══ */
-@media (max-width:640px){
-  /* prevent iOS auto-zoom when focusing inputs */
-  input,select,textarea{font-size:16px !important;}
-  .hdr{padding:10px 12px;}
-  #timeline-strip-wrap{width:calc(100% + 24px);margin:8px -12px -10px;}
-  .app-title{font-size:11px;letter-spacing:.08em;}
-  .bal-display,.bal-input{font-size:26px;}
-  .bal-input{width:140px;}
-  .bal-side{margin-left:8px;padding-left:10px;gap:3px;}
-  .bal-side .stat-val{font-size:13px;}
-  .hdr-stats{gap:14px;margin-top:8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;width:100%;}
-  .hdr-stats .stat{flex-shrink:0;}
-  .stat-val{font-size:14px;}
-  .stat-lbl{font-size:10px;white-space:nowrap;}
-  .hdr-actions{position:absolute;top:8px;right:10px;padding:0;width:auto;}
-  .hdr-actions .btn{flex:none;padding:7px 12px;font-size:14px;}
-  .main-wrap{padding:12px 8px 80px;}
-  .tab-bar{width:100%;}
-  .tab-btn{flex:1;padding:10px 8px;}
-  .period-hdr{padding:11px 10px;}
-  .bill-row{padding:9px 6px;gap:6px;}
-  .bill-day{width:20px;font-size:11px;}
-  .bill-name{font-size:13px;}
-  .bill-amt{font-size:13px;min-width:52px;flex-shrink:0;}
-  .bill-acts{opacity:1;gap:5px;}
-  .act-btn{font-size:17px;padding:6px 8px;min-width:34px;text-align:center;}
-  .status-btn{width:30px;height:30px;font-size:14px;flex-shrink:0;}
-  .btn.sm{padding:6px 10px;}
-  .add-grid,.add-grid.bill{grid-template-columns:1fr 1fr;}
-  .add-grid > div:first-child{grid-column:1/-1;}
-  .modal-backdrop{padding:14px 8px;}
-  .modal{padding:16px;border-radius:10px;}
-  .dc-card-hdr{padding:12px 10px;}
-}
-/* Periods */
-.period{margin-bottom:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
-.period.active{border-color:var(--green-dim);box-shadow:0 0 0 1px var(--green-dim);}
-.period.future{opacity:.78;}
-.period.past{opacity:.5;filter:saturate(.35);transition:opacity .2s,filter .2s;}
-.period.past:hover{opacity:.75;}
-.period.past:hover{opacity:.35;filter:saturate(.3);pointer-events:auto;}
-.period.past .period-hdr{cursor:default;}
-.period-hdr{display:flex;align-items:center;gap:8px;padding:9px 14px;background:var(--surface);cursor:pointer;user-select:none;}
-.period.active .period-hdr{background:#0d2218;}
-.period-badge{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--green-dim);color:var(--green);}
-.period-dates{font-size:13px;font-weight:600;color:var(--text-mid);flex:1;}
-.period.active .period-dates{color:var(--green);}
-.period-income{font-size:14px;font-weight:600;color:var(--green);}
-.period-end{font-size:14px;font-weight:600;margin-left:4px;}
-.period-end.pos{color:var(--green);} .period-end.neg{color:var(--red);} .period-end.tight{color:var(--amber);}
-.period-toggle{font-size:12px;color:var(--text-dim);transition:transform .2s;}
-.period.open .period-toggle{transform:rotate(180deg);}
-.period-body{display:none;}
-.period.open .period-body{display:block;}
-/* Bill rows */
-.bill-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-top:1px solid var(--border);transition:background .12s;}
-.bill-row:hover{background:var(--surface2);}
-.bill-row.cleared{opacity:.32;}
-.bill-row.vacation{border-left:2px solid #22c55e;}
-.bill-row.seasonal{border-left:2px solid var(--blue);}
-.bill-row.sec-hdr{background:var(--surface);cursor:default;}
-.bill-row.sec-hdr:hover{background:var(--surface);}
-.status-btn{width:22px;height:22px;border-radius:3px;border:1px solid var(--border2);background:transparent;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--mono);color:var(--text-dim);transition:all .12s;}
-.status-btn.pending{border-color:var(--amber);background:var(--amber-dim);color:var(--amber);}
-.status-btn.cleared{border-color:var(--green-dim);background:var(--green-dim);color:var(--green);}
-.bill-day{font-size:12px;color:var(--text-dim);width:24px;flex-shrink:0;text-align:right;}
-.bill-name{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.bill-name.struck{color:var(--text-dim);text-decoration:line-through;}
-.bill-name a.bill-link{color:var(--blue);text-decoration:none;border-bottom:1px dashed var(--blue-dim);}
-.bill-name a.bill-link:hover{border-bottom-color:var(--blue);}
-.bill-name.struck a.bill-link{color:var(--text-dim);text-decoration:line-through;border-bottom:none;}
-.bill-amt{font-size:14px;font-weight:500;min-width:68px;text-align:right;}
-.bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
-.bill-acts{display:flex;gap:5px;opacity:1;}
-.act-btn{font-size:16px;line-height:1;padding:5px 7px;border:none;border-radius:6px;background:transparent;cursor:pointer;opacity:1;-webkit-tap-highlight-color:transparent;}
-.act-btn:active{background:var(--hover);}
-.act-btn.del{opacity:.55;}
-.act-btn.del:active{opacity:1;}
-.sec-lbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);font-weight:600;}
-.add-input{font-family:var(--mono);font-size:13px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:4px 8px;outline:none;flex:1;}
-.add-input:focus{border-color:var(--text-dim);}
-.add-input::placeholder{color:var(--text-dim);}
-.period-footer{display:flex;align-items:center;gap:8px;padding:8px 14px;border-top:1px solid var(--border);background:var(--surface);}
-/* Debt Collector */
-.dc-stat-row{display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap;padding:12px 14px;background:var(--surface);border-radius:6px;border:1px solid var(--border);}
-.dc-avalanche{font-size:12px;color:var(--text-dim);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:5px;border:1px solid var(--border);}
-.dc-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden;}
-.dc-card.maxed{border-color:var(--red-dim);}
-.dc-card.high{border-color:var(--amber-dim);}
-.dc-card-hdr{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none;}
-.dc-card-hdr:hover{background:var(--surface2);}
-.dc-card-name{font-size:15px;font-weight:600;flex:1;}
-.dc-int{font-size:13px;color:var(--amber);white-space:nowrap;}
-.dc-util{font-size:12px;padding:2px 7px;border-radius:3px;font-weight:700;}
-.dc-util.maxed{background:var(--red-dim);color:var(--red);}
-.dc-util.high{background:var(--amber-dim);color:var(--amber);}
-.dc-util.ok{background:var(--green-dim);color:var(--green);}
-.dc-bal{font-size:16px;font-weight:600;color:var(--red);}
-.dc-bar-wrap{height:4px;background:var(--border2);border-radius:0;}
-.dc-bar-fill{height:100%;transition:width .3s;}
-.dc-body{display:none;border-top:1px solid var(--border);padding:14px 16px;}
-.dc-card.open .dc-body{display:block;}
-.dc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
-.dc-field{display:flex;flex-direction:column;gap:3px;}
-.dc-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-dim);}
-.dc-val{font-size:15px;font-weight:500;}
-.dc-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:5px 8px;outline:none;width:100%;}
-.dc-input:focus{border-color:var(--text-mid);}
-.dc-proj{background:var(--bg);border:1px solid var(--border2);border-radius:5px;padding:10px 12px;margin-bottom:12px;font-size:14px;}
-.dc-actions{display:flex;gap:8px;flex-wrap:wrap;}
-/* Modal */
-.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding:48px 16px;overflow-y:auto;}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:8px;width:100%;max-width:480px;padding:22px;}
-.modal.sm{max-width:360px;}
-.modal h2{font-size:15px;font-weight:600;margin-bottom:18px;letter-spacing:.04em;}
-.m-lbl{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;display:block;}
-.m-input{font-family:var(--mono);font-size:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text);padding:7px 10px;outline:none;width:100%;margin-bottom:10px;}
-.m-input:focus{border-color:var(--text-mid);}
-.m-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.m-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
-.trow{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);}
-.trow:last-child{border-bottom:none;}
-::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-</style>
-</head>
-<body>
-<div class="hdr">
-  <div class="hdr-top">
-    <div>
-      <div class="app-title"><span id="app-title-text">Heath</span> <span id="sync-dot" title="Sync off — click ☁ Sync to set up" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-dim);margin-left:6px;vertical-align:middle;cursor:pointer;" onclick="openSyncModal()"></span></div>
-      <div class="bal-wrap">
-        <div class="bal-lbl">Balance</div>
-        <div id="bal-display" class="bal-display" onclick="editBal()">$0</div>
+        <div style="display:flex;align-items:center;gap:8px;"><div id="bal-display" class="bal-display" onclick="editBal()">$0</div><span onclick="showBalHistory(this)" title="Balance change history" style="font-size:12px;opacity:.35;cursor:help;">👁</span></div>
         <input id="bal-input" class="bal-input" type="text" style="display:none"
           onblur="saveBal()" onkeydown="if(event.key==='Enter')saveBal()">
         <div id="bal-side" class="bal-side"></div>
@@ -438,6 +223,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 </div>
 
 <div class="main-wrap">
+  <div id="digest-banner"></div>
   <div class="tab-bar">
     <button class="tab-btn active" id="tab-btn-periods" onclick="setTab('periods')">Pay Periods</button>
     <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
@@ -474,7 +260,7 @@ const DEFAULT_TEMPLATES = [
 let S = {balance:0, templates:DEFAULT_TEMPLATES.map(t=>({...t})), periods:[],
   settings:{periodLength:14, anchorDate:null, setupComplete:false},
   incomes:[], piggies:[]};
-let DC = {cards:[], tab:'periods'};
+let DC = {cards:[], tab:'periods', strategy:'avalanche', extra:0};
 
 function uid() { return Math.random().toString(36).slice(2,9); }
 function fmtD(n) { return '$'+Math.abs(n).toLocaleString('en-US',{maximumFractionDigits:0}); }
@@ -608,7 +394,8 @@ function periodPiggyTotal(p) {
   });
   return sum;
 }
-function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:b.amount),0) + periodPiggyTotal(p); }
+function billEffAmt(b){ return Math.max(b.amount||0, b.spent||0); }
+function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:billEffAmt(b)),0) + periodPiggyTotal(p); }
 
 function billDueInPeriod(day,s,e) {
   if (day===null) return true;
@@ -886,7 +673,7 @@ function heathUndo() {
   S.subtitle=d.subtitle||'';S.settings=d.settings||S.settings;S.incomes=d.incomes||[];S.piggies=d.piggies||[];
   localStorage.setItem(STORAGE_KEY,prev);render();
 }
-function dcPersist() { localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards})); }
+function dcPersist() { localStorage.setItem(DC_KEY,JSON.stringify({cards:DC.cards,strategy:DC.strategy,extra:DC.extra})); }
 
 function loadStorage() {
   try {
@@ -896,7 +683,7 @@ function loadStorage() {
   if (!S.periods.length) initPeriods();
   try {
     const r=localStorage.getItem(DC_KEY);
-    if (r) { const d=JSON.parse(r); if(d.cards)DC.cards=d.cards; }
+    if (r) { const d=JSON.parse(r); if(d.cards)DC.cards=d.cards; if(d.strategy)DC.strategy=d.strategy; if(d.extra!=null)DC.extra=d.extra; }
   } catch(e) {}
 }
 
@@ -1088,7 +875,29 @@ function setTab(tab) {
   if(tab==='piggy') renderPiggy();
 }
 
-function render() { renderHeader(); renderTimeline(); renderPeriods(); if(S.ui_manage) renderModal(); }
+function render() { renderHeader(); renderTimeline(); renderPeriods(); renderDigest(); if(S.ui_manage) renderModal(); }
+function renderDigest(){
+  var el=document.getElementById('digest-banner'); if(!el) return;
+  if(S.ui_digestDismissed){ el.innerHTML=''; return; }
+  var ap=S.periods.find(function(p){return p.active;}); if(!ap){ el.innerHTML=''; return; }
+  var now=new Date(); now.setHours(0,0,0,0);
+  var soon=[];
+  ap.bills.forEach(function(b){
+    if(b.status==='cleared'||!b.day) return;
+    var due=nearestDueDate?nearestDueDate(b.day,ap):null;
+    if(!due){ var s=new Date(ap.startDate+'T00:00:00'); due=new Date(s.getFullYear(),s.getMonth(),b.day); if(due<s)due=new Date(s.getFullYear(),s.getMonth()+1,b.day); }
+    var days=Math.round((due-now)/86400000);
+    if(days>=0&&days<=3) soon.push({b:b,days:days,due:due});
+  });
+  if(!soon.length){ el.innerHTML=''; return; }
+  soon.sort(function(a,c){return a.days-c.days;});
+  var tot=soon.reduce(function(s,x){return s+billEffAmt(x.b);},0);
+  el.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--surface);border:1px solid var(--amber-dim);border-left:3px solid var(--amber);border-radius:8px;margin-bottom:10px;font-size:13px;flex-wrap:wrap;">'+
+    '<span>📅</span><span style="color:var(--text-mid);"><b style="color:var(--amber);">'+soon.length+' bill'+(soon.length>1?'s':'')+' due soon</b> ('+fmtD(tot)+'): '+
+    soon.map(function(x){return esc(x.b.name)+' <span style="color:var(--text-dim);">('+(x.days===0?'today':x.days===1?'tomorrow':x.days+'d')+')</span>';}).join(', ')+'</span>'+
+    '<button onclick="S.ui_digestDismissed=true;renderDigest()" style="margin-left:auto;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:15px;padding:0 4px;">×</button>'+
+  '</div>';
+}
 function renderTimeline() {
   var wrap = document.getElementById('timeline-strip-wrap');
   if (!wrap) return;
@@ -1304,6 +1113,20 @@ function renderPeriodBody(p,periodIdx,startBal) {
   });
 
   // Bills section
+  // ── Quick Spend bar (active period only) ──
+  if(p.active){
+    var qsOpen=S.ui_qsOpen||'';
+    html+='<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;">'+
+      '<span style="font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">⚡ Quick spend</span>'+
+      [['groc','🛒 Groceries'],['gas','⛽ Gas'],['food','🍔 Food']].map(function(q){
+        var active=qsOpen===q[0];
+        return '<button class="btn sm" style="font-size:12px;'+(active?'border-color:var(--green);color:var(--green);':'')+'" data-q="'+q[0]+'" onclick="S.ui_qsOpen=S.ui_qsOpen===this.dataset.q?\'\':this.dataset.q;render();if(S.ui_qsOpen)setTimeout(function(){var e=document.getElementById(\'qs-amt\');if(e)e.focus();},50)">'+q[1]+'</button>';
+      }).join('')+
+      (qsOpen?'<span style="display:flex;align-items:center;gap:5px;"><span style="color:var(--text-dim);font-size:13px;">$</span>'+
+        '<input id="qs-amt" type="number" inputmode="numeric" min="0" step="1" placeholder="0" style="width:75px;padding:6px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit;font-size:14px;" onkeydown="if(event.key===\'Enter\')qsLog(\''+p.id+'\')">'+
+        '<button class="btn sm primary" onclick="qsLog(\''+p.id+'\')">Log</button></span>':'')+
+    '</div>';
+  }
   html+='<div class="bill-row sec-hdr"><div class="sec-lbl">Bills & Expenses</div></div>';
   html+=piggyRows;
   if (startBal!==null) {
@@ -1329,8 +1152,9 @@ function renderPeriodBody(p,periodIdx,startBal) {
       '<button class="status-btn '+b.status+'" title="'+statusTip+'" onclick="cycleStatus(\''+p.id+'\',\''+b.id+'\')">'+
         (b.status==='upcoming'?'·':b.status==='pending'?'P':'✓')+'</button>'+
       '<div class="bill-day">'+(b.day||'~')+'</div>'+
-      '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+'</div>'+
-      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(b.amount))+'</div>'+
+      '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+
+      ((b.spent||0)>0&&b.tag!=='quickspend-food'?'<div style="font-size:10.5px;color:'+((b.spent||0)>(b.amount||0)?'var(--red)':'var(--text-dim)')+';">spent '+fmtD(b.spent)+' of '+fmtD(b.amount)+((b.spent||0)>(b.amount||0)?' — over budget':' · '+fmtD(Math.max(0,(b.amount||0)-(b.spent||0)))+' left')+'</div>':'')+'</div>'+
+      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
       '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
 
@@ -1436,7 +1260,35 @@ function renderPeriodBody(p,periodIdx,startBal) {
 
 // ═══ PERIOD HANDLERS ═══
 function editBal(){const d=document.getElementById('bal-display'),i=document.getElementById('bal-input');i.value=String(S.balance);d.style.display='none';i.style.display='inline-block';i.focus();i.select();}
-function saveBal(){const i=document.getElementById('bal-input'),v=parseDollars(i.value);S.balance=isNaN(v)?S.balance:v;document.getElementById('bal-display').style.display='';i.style.display='none';persist();render();}
+function saveBal(){
+  const i=document.getElementById('bal-input'),v=parseDollars(i.value);
+  if(!isNaN(v)&&v!==S.balance){
+    if(!S.settings.balanceLog)S.settings.balanceLog=[];
+    S.settings.balanceLog.push({who:localStorage.getItem('heath_username')||'?',when:Date.now(),from:S.balance,to:v});
+    if(S.settings.balanceLog.length>10)S.settings.balanceLog=S.settings.balanceLog.slice(-10);
+    S.balance=v;
+  }
+  document.getElementById('bal-display').style.display='';i.style.display='none';persist();render();
+}
+function showBalHistory(el){
+  var existing=document.querySelector('.bal-hist-tip');
+  if(existing){existing.remove();return;}
+  var log=(S.settings&&S.settings.balanceLog)||[];
+  var tip=document.createElement('div');
+  tip.className='bal-hist-tip';
+  tip.style.cssText='position:absolute;left:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text-mid);z-index:50;box-shadow:0 4px 14px rgba(0,0,0,.3);min-width:220px;';
+  tip.innerHTML=log.length
+    ? '<div style="font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-size:9px;margin-bottom:5px;">Balance changes</div>'
+      + log.slice().reverse().map(function(e){
+          return '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed var(--border);">'
+            +'<span>'+esc(e.who)+' \u00b7 '+fmtHistoryTime(e.when)+'</span>'
+            +'<span style="color:'+(e.to>=e.from?'var(--green)':'var(--red)')+';">'+fmtD(e.from)+' \u2192 '+fmtD(e.to)+'</span></div>';
+        }).join('')
+    : 'No balance changes tracked yet.';
+  el.parentElement.style.position='relative';
+  el.parentElement.appendChild(tip);
+  setTimeout(function(){tip.remove();},6000);
+}
 function togglePeriod(id){const p=S.periods.find(pp=>pp.id===id);if(p)p.open=!p.open;persist();render();}
 function setActivePeriod(id){S.periods.forEach(p=>{p.active=p.id===id;if(p.active)p.open=true;});persist();render();}
 function stampHistory(b, action) {
@@ -1461,6 +1313,29 @@ function toggleHistoryTip(el) {
   el.parentElement.style.position='relative';
   el.parentElement.appendChild(tip);
   setTimeout(function(){tip.remove();},3000);
+}
+function qsLog(pid){
+  const p=S.periods.find(pp=>pp.id===pid); if(!p)return;
+  const amt=Math.round(parseFloat(document.getElementById('qs-amt')?.value)||0);
+  if(amt<=0)return;
+  const kind=S.ui_qsOpen;
+  if(kind==='food'){
+    // Standalone eating-out accumulator
+    let b=p.bills.find(bb=>bb.tag==='quickspend-food');
+    if(!b){ b={id:uid(),templateId:null,name:'🍔 Food (eating out)',amount:0,day:null,status:'upcoming',category:'variable',tag:'quickspend-food',url:'',autopay:false,recurrence:'one-off',spent:0};
+      p.bills.push(b); }
+    b.amount=(b.amount||0)+amt; b.spent=b.amount;
+    stampHistory(b,'+$'+amt+' food');
+  } else {
+    // Linked: draw down the Groceries / Gas budget bill
+    const names = kind==='groc' ? ['groceries'] : ['gas/fuel','gas','fuel'];
+    let b=p.bills.find(bb=>names.indexOf((bb.name||'').toLowerCase())>-1);
+    if(!b){ alert('No '+(kind==='groc'?'Groceries':'Gas')+' bill found in this period. Add one first (or it may be named differently).'); return; }
+    b.spent=(b.spent||0)+amt;
+    stampHistory(b,'+$'+amt+' spent');
+  }
+  S.ui_qsOpen='';
+  persist(); render();
 }
 function cycleStatus(pid,bid){const p=S.periods.find(pp=>pp.id===pid);if(!p)return;const b=p.bills.find(bb=>bb.id===bid);if(!b)return;const c=['upcoming','pending','cleared'];b.status=c[(c.indexOf(b.status)+1)%c.length];stampHistory(b,b.status);persist();render();}
 function delBill(pid,bid){
@@ -2089,6 +1964,11 @@ function renderModal(){
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Your Name</div>'+
           '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Shown in change history so you and your partner know who edited what.</div>'+
           '<input class="m-input" style="margin-bottom:0;max-width:220px;" value="'+esc(localStorage.getItem('heath_username')||'')+'" placeholder="e.g. Emma" onchange="localStorage.setItem(\'heath_username\',this.value.trim())">'+
+          '<div style="margin-top:10px;"><span style="font-size:11px;color:var(--text-dim);">PIN lock (this device): </span>'+
+          (localStorage.getItem('heath_pin')
+            ?'<button class="btn" style="font-size:12px;" onclick="if(confirm(\'Remove PIN lock?\')){localStorage.removeItem(\'heath_pin\');renderModal();}">🔓 Remove PIN</button>'
+            :'<button class="btn" style="font-size:12px;" onclick="var p=prompt(\'Set a 4-8 digit PIN (numbers only). You\\\'ll need it every time Heath opens on this device.\');if(p&&/^[0-9]{4,8}$/.test(p)){localStorage.setItem(\'heath_pin\',p);renderModal();}else if(p!==null){alert(\'PIN must be 4-8 digits.\');}">🔒 Set PIN</button>')+
+          '</div>'+
         '</div>'+
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Income Sources</div>'+
@@ -2104,7 +1984,7 @@ function renderModal(){
         '</div>'+
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Theme</div>'+
-          (function(){var themes=[['','Terminal','#22c55e'],['theme-emerald','Emerald','#34d399'],['theme-ocean','Ocean','#38bdf8'],['theme-lavender','Lavender','#a78bfa'],['theme-midnight','Midnight','#818cf8'],['theme-rust','Rust','#fb923c']];var cur=localStorage.getItem('heath_theme')||'';return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">'+themes.map(function(th){var active=cur===th[0];return '<button onclick="document.body.className=\''+th[0]+'\';localStorage.setItem(\'heath_theme\',\''+th[0]+'\')" style="padding:5px 10px;border-radius:8px;border:1.5px solid '+(active?th[2]:'var(--border2)')+';background:'+(active?'var(--bg2)':'transparent')+';color:var(--text);font-size:11px;font-weight:'+(active?'700':'400')+';cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:'+th[2]+';"></span>'+th[1]+'</button>';}).join('')+'</div>';})() +
+          (function(){var themes=[['','Terminal','#4ade80'],['theme-emerald','Emerald','#34d399'],['theme-ocean','Ocean','#38bdf8'],['theme-lavender','Lavender','#a78bfa'],['theme-midnight','Midnight','#818cf8'],['theme-rust','Rust','#fb923c'],['theme-paper','☀️ Paper','#b45309'],['theme-daylight','☀️ Daylight','#2563eb'],['theme-mint','☀️ Mint','#059669']];var cur=localStorage.getItem('heath_theme')||'';return '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px;">'+themes.map(function(th){var active=cur===th[0];return '<button onclick="document.body.className=\''+th[0]+'\';localStorage.setItem(\'heath_theme\',\''+th[0]+'\')" style="padding:5px 10px;border-radius:8px;border:1.5px solid '+(active?th[2]:'var(--border2)')+';background:'+(active?'var(--bg2)':'transparent')+';color:var(--text);font-size:11px;font-weight:'+(active?'700':'400')+';cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:'+th[2]+';"></span>'+th[1]+'</button>';}).join('')+'</div>';})() +
         '</div>'+
         '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">'+
           '<div style="font-size:12px;font-weight:600;color:var(--text-mid);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Data &amp; Sync</div>'+
@@ -2112,6 +1992,7 @@ function renderModal(){
             '<button class="btn" onclick="openSyncModal()">☁ Sync settings</button>'+
             
             '<button class="btn" onclick="extendPeriods();closeManage();" title="Append another year of periods to the end">＋ Extend 1 year</button>'+
+            '<button class="btn" onclick="openTrends()">📈 Trends</button>'+
             '<button class="btn" onclick="checkForUpdate(true)">🔄 Check for updates</button>'+
           '</div>'+
           '<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">'+S.periods.length+' periods · '+(periodLen()===7?'weekly':'bi-weekly')+' · through '+(S.periods.length?new Date(S.periods[S.periods.length-1].endDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'}):'—')+' · build '+HEATH_BUILD+'</div>'+
@@ -2278,6 +2159,44 @@ function utilPct(b,l){if(!l)return '';return Math.round(b/l*100)+'%';}
 function utilColor(b,l){const c=utilClass(b,l);return c==='maxed'?'var(--red)':c==='high'?'var(--amber)':'var(--green)';}
 
 function getAvalanche(){return [...DC.cards].sort((a,b)=>(b.apr||26)-(a.apr||26));}
+function getSnowball(){return [...DC.cards].sort((a,b)=>(a.balance||0)-(b.balance||0));}
+
+// Month-by-month payoff simulation.
+// strategy: 'avalanche'|'snowball'. extra: $ beyond total minimums each month.
+// Freed-up minimums from paid-off debts roll into the target debt (debt-snowball mechanics).
+function dcSimulate(strategy, extra){
+  var debts = DC.cards.filter(function(c){return (c.balance||0)>0;})
+    .map(function(c){return {id:c.id,name:c.name,bal:c.balance||0,apr:(c.apr||26)/100/12,min:c.minPayment||Math.max(25,Math.round((c.balance||0)*0.02))};});
+  if(!debts.length) return null;
+  var order = strategy==='snowball'
+    ? debts.slice().sort(function(a,b){return a.bal-b.bal;})
+    : debts.slice().sort(function(a,b){return b.apr-a.apr;});
+  var totalInterest=0, month=0, payoffs={}, budget=debts.reduce(function(s,d){return s+d.min;},0)+(extra||0);
+  // Guard: if budget can't cover first month's interest, it never converges
+  var firstInt = debts.reduce(function(s,d){return s+d.bal*d.apr;},0);
+  if(budget<=firstInt) return {impossible:true, budget:budget, interest:firstInt};
+  while(order.some(function(d){return d.bal>0;}) && month<600){
+    month++;
+    var avail=budget;
+    // accrue interest
+    order.forEach(function(d){ if(d.bal>0){ var i=d.bal*d.apr; d.bal+=i; totalInterest+=i; } });
+    // pay minimums on all open debts
+    order.forEach(function(d){ if(d.bal>0){ var pay=Math.min(d.min,d.bal,avail); d.bal-=pay; avail-=pay; } });
+    // remaining budget → first unpaid debt in strategy order, cascade to next
+    for(var i=0;i<order.length&&avail>0;i++){ var d=order[i]; if(d.bal>0){ var pay=Math.min(avail,d.bal); d.bal-=pay; avail-=pay; } }
+    order.forEach(function(d){ if(d.bal<=0.005 && !payoffs[d.id]){ d.bal=0; payoffs[d.id]=month; } });
+  }
+  var now=new Date();
+  return {
+    months:month,
+    totalInterest:Math.round(totalInterest),
+    debtFreeDate:new Date(now.getFullYear(),now.getMonth()+month,1).toLocaleDateString('en-US',{month:'short',year:'numeric'}),
+    perCard:order.map(function(d){var m=payoffs[d.id]||month;return {id:d.id,name:d.name,payoffMonth:m,payoffDate:new Date(now.getFullYear(),now.getMonth()+m,1).toLocaleDateString('en-US',{month:'short',year:'numeric'})};})
+      .sort(function(a,b){return a.payoffMonth-b.payoffMonth;})
+  };
+}
+function dcSetStrategy(s){DC.strategy=s;dcPersist();renderDebt();}
+function dcSetExtra(v){DC.extra=Math.max(0,Math.round(parseFloat(v)||0));dcPersist();renderDebt();}
 function avalancheRank(card){return getAvalanche().findIndex(c=>c.id===card.id)+1;}
 
 function renderDebt(){
@@ -2298,13 +2217,40 @@ function renderDebt(){
     '<div class="stat"><div class="stat-lbl">Monthly Interest</div><div class="stat-val neg">+'+fmtD(totInt)+'</div></div>'+
   '</div>';
 
-  // Avalanche order
-  if(av.length>1){
-    html+='<div class="dc-avalanche">⚡ <strong style="color:var(--text-mid);">Avalanche order (highest APR first):</strong> '+
-      av.map((c,i)=>'<span style="color:'+(i===0?'var(--red)':'var(--text-mid)')+';">'+esc(c.name)+' <span style="color:var(--text-dim);">('+( c.apr||26)+'%)</span></span>').join(' → ')+'</div>';
+  // ── Payoff Strategy Planner ──
+  if(cards.some(function(c){return (c.balance||0)>0;})){
+    var strat=DC.strategy||'avalanche';
+    var plan=dcSimulate(strat, DC.extra||0);
+    var planAlt=dcSimulate(strat==='avalanche'?'snowball':'avalanche', DC.extra||0);
+    var planMinOnly=dcSimulate(strat, 0);
+    html+='<div class="dc-strategy">'+
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'+
+        '<span style="font-size:11px;font-weight:700;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Payoff Plan</span>'+
+        '<button class="dc-strat-btn'+(strat==='avalanche'?' active':'')+'" onclick="dcSetStrategy(\'avalanche\')" title="Highest APR first — mathematically cheapest">⚡ Avalanche</button>'+
+        '<button class="dc-strat-btn'+(strat==='snowball'?' active':'')+'" onclick="dcSetStrategy(\'snowball\')" title="Smallest balance first — quick wins for motivation">❄️ Snowball</button>'+
+        '<span style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-mid);">Extra/month:'+
+          '<span style="color:var(--text-dim);">$</span><input type="number" min="0" step="25" value="'+(DC.extra||0)+'" onchange="dcSetExtra(this.value)" style="width:80px;padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit;font-size:13px;">'+
+        '</span>'+
+      '</div>';
+    if(plan&&plan.impossible){
+      html+='<div style="font-size:13px;color:var(--red);">⚠ Your minimums ('+fmtD(plan.budget)+'/mo) don\'t cover monthly interest ('+fmtD(Math.ceil(plan.interest))+'/mo). Debt grows at this rate — add an extra payment above.</div>';
+    } else if(plan){
+      var interestSavedVsMin = planMinOnly&&!planMinOnly.impossible ? planMinOnly.totalInterest-plan.totalInterest : 0;
+      var altDiff = planAlt&&!planAlt.impossible ? planAlt.totalInterest-plan.totalInterest : 0;
+      html+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;">'+
+        '<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Debt-free</div><div style="font-size:17px;font-weight:800;color:var(--green);">'+plan.debtFreeDate+'</div><div style="font-size:11px;color:var(--text-dim);">'+fmtMonths(plan.months)+'</div></div>'+
+        '<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Interest paid</div><div style="font-size:17px;font-weight:800;color:var(--red);">'+fmtD(plan.totalInterest)+'</div>'+((DC.extra||0)>0&&interestSavedVsMin>0?'<div style="font-size:11px;color:var(--green);">saves '+fmtD(interestSavedVsMin)+' vs mins only</div>':'')+'</div>'+
+        (altDiff>0?'<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">vs '+(strat==='avalanche'?'snowball':'avalanche')+'</div><div style="font-size:17px;font-weight:800;color:var(--green);">'+fmtD(altDiff)+' cheaper</div><div style="font-size:11px;color:var(--text-dim);">this strategy wins</div></div>':'')+
+      '</div>';
+      html+='<div style="font-size:12px;color:var(--text-mid);">'+
+        plan.perCard.map(function(pc,i){return '<span style="color:'+(i===0?'var(--green)':'var(--text-mid)')+';font-weight:'+(i===0?'700':'400')+';">'+(i+1)+'. '+esc(pc.name)+' <span style="color:var(--text-dim);">('+pc.payoffDate+')</span></span>';}).join(' <span style="color:var(--text-dim);">→</span> ')+
+      '</div>';
+    }
+    html+='</div>';
   }
 
-  // Cards
+  // Cards — grid layout
+  html+='<div class="dc-cards-grid">';
   cards.forEach(function(card){
     const bal=card.balance||0, lim=card.limit||0, apr=card.apr||26;
     const interest=calcMonthlyInt(bal,apr);
@@ -2374,6 +2320,7 @@ function renderDebt(){
     html+='</div>';
   });
 
+  html+='</div>';
   html+='<button class="btn primary" style="margin-top:12px;" onclick="dcAddModal()">＋ Add Card</button>';
   el.innerHTML=html;
 }
@@ -2519,6 +2466,43 @@ function dcRemovePayment(id,si){
   renderDebt();render();
 }
 
+function openTrends(){
+  var ai=S.periods.findIndex(function(p){return p.active;});
+  if(ai<0)ai=0;
+  // Last 8 periods up to and including active
+  var start=Math.max(0,ai-7);
+  var rows=S.periods.slice(start,ai+1).map(function(p){
+    var inc=periodIncomeTotal(p);
+    // include cleared bills at their amounts for a truthful history
+    var out=p.bills.reduce(function(s,b){return s+billEffAmt(b);},0)+periodPiggyTotal(p);
+    return {label:fmtDs(p.startDate),inc:inc,out:out,net:inc-out,active:p.active};
+  });
+  var maxAbs=Math.max(1,rows.reduce(function(m,r){return Math.max(m,Math.abs(r.net));},0));
+  var piggyTotal=(S.piggies||[]).reduce(function(s,pg){return s+piggySaved(pg);},0);
+  var debtTotal=(DC.cards||[]).reduce(function(s,c){return s+(c.balance||0);},0);
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+      '<div class="modal"><h2>📈 Trends</h2>'+
+        '<div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;">Period surplus (income − bills − piggy)</div>'+
+        rows.map(function(r){
+          var pct=Math.round(Math.abs(r.net)/maxAbs*100);
+          return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px;">'+
+            '<span style="width:52px;color:var(--text-dim);flex-shrink:0;">'+r.label+(r.active?' •':'')+'</span>'+
+            '<div style="flex:1;background:var(--surface2);border-radius:4px;height:14px;overflow:hidden;">'+
+              '<div style="height:14px;width:'+pct+'%;background:'+(r.net>=0?'var(--green)':'var(--red)')+';border-radius:4px;"></div>'+
+            '</div>'+
+            '<span style="width:70px;text-align:right;color:'+(r.net>=0?'var(--green)':'var(--red)')+';font-weight:600;flex-shrink:0;">'+(r.net>=0?'+':'')+fmtD(r.net)+'</span>'+
+          '</div>';
+        }).join('')+
+        '<div style="display:flex;gap:14px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border);flex-wrap:wrap;">'+
+          '<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">🐷 Saved in piggies</div><div style="font-size:16px;font-weight:800;color:var(--green);">'+fmtD(piggyTotal)+'</div></div>'+
+          (debtTotal>0?'<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">💀 Total debt</div><div style="font-size:16px;font-weight:800;color:var(--red);">'+fmtD(debtTotal)+'</div></div>':'')+
+          '<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">Avg surplus</div><div style="font-size:16px;font-weight:800;color:var(--text);">'+fmtD(Math.round(rows.reduce(function(s,r){return s+r.net;},0)/Math.max(1,rows.length)))+'</div></div>'+
+        '</div>'+
+        '<div class="m-actions"><button class="btn" onclick="closeModal();renderModal();">← Back</button></div>'+
+      '</div>'+
+    '</div>';
+}
 function closeModal(){document.getElementById('modal-root').innerHTML='';}
 function exportData(){
   const blob=new Blob([JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,dc:DC.cards},null,2)],{type:'application/json'});
@@ -2976,8 +2960,50 @@ function wzFinish(withSync) {
 }
 
 (function(){var th=localStorage.getItem('heath_theme');if(th)document.body.className=th;})();
+// ── Rotating daily backups (heath_backup_1..3, newest first) ──
+function autoBackup(){
+  try{
+    var raw=localStorage.getItem(STORAGE_KEY); if(!raw) return;
+    var today=fmtDate(new Date());
+    var meta=JSON.parse(localStorage.getItem('heath_backup_meta')||'{}');
+    if(meta.lastDate===today) return; // one per day
+    localStorage.setItem('heath_backup_3', localStorage.getItem('heath_backup_2')||'');
+    localStorage.setItem('heath_backup_2', localStorage.getItem('heath_backup_1')||'');
+    localStorage.setItem('heath_backup_1', JSON.stringify({date:today, dc:localStorage.getItem(DC_KEY)||'', data:raw}));
+    localStorage.setItem('heath_backup_meta', JSON.stringify({lastDate:today}));
+  }catch(e){}
+}
+function restoreBackup(slot){
+  try{
+    var raw=localStorage.getItem('heath_backup_'+slot); if(!raw){alert('No backup in slot '+slot+'.');return;}
+    var b=JSON.parse(raw);
+    if(!confirm('Restore backup from '+b.date+'? Current data will be replaced (a fresh backup of it is kept in slot 1 tomorrow).'))return;
+    localStorage.setItem(STORAGE_KEY, b.data);
+    if(b.dc) localStorage.setItem(DC_KEY, b.dc);
+    location.reload();
+  }catch(e){alert('Restore failed: '+e.message);}
+}
 loadStorage();
 migrateToV3();
+autoBackup();
+// ── PIN lock ──
+(function(){
+  var pin=localStorage.getItem('heath_pin');
+  if(!pin) return;
+  var ov=document.createElement('div');
+  ov.id='pin-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;';
+  ov.innerHTML='<div style="font-size:38px;">🔒</div><div style="font-size:14px;color:var(--text-mid);">Enter PIN to unlock Heath</div>'+
+    '<input id="pin-input" type="password" inputmode="numeric" maxlength="8" style="width:140px;padding:12px;text-align:center;font-size:22px;letter-spacing:8px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-family:inherit;">'+
+    '<div id="pin-err" style="font-size:12px;color:var(--red);height:16px;"></div>';
+  document.body.appendChild(ov);
+  var inp=ov.querySelector('#pin-input');
+  inp.addEventListener('input',function(){
+    if(inp.value===pin){ov.remove();}
+    else if(inp.value.length>=pin.length){ov.querySelector('#pin-err').textContent='Wrong PIN';inp.value='';}
+  });
+  setTimeout(function(){inp.focus();},100);
+})();
 if (wzShouldShow()) { wzStart(); }
 render();
 
@@ -3142,7 +3168,9 @@ function openSyncModal(){
         '<div style="flex:1;"></div>'+
         '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);">'+
             '<div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;">Advanced</div>'+
-            '<div style="display:flex;gap:6px;"><button class="btn" style="font-size:12px;" onclick="importData()">↑ Import JSON</button><button class="btn" style="font-size:12px;" onclick="exportData()">↓ Export JSON</button></div>'+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn" style="font-size:12px;" onclick="importData()">↑ Import JSON</button><button class="btn" style="font-size:12px;" onclick="exportData()">↓ Export JSON</button>'+
+            (function(){var out='';for(var s=1;s<=3;s++){try{var b=JSON.parse(localStorage.getItem('heath_backup_'+s)||'null');if(b)out+='<button class="btn" style="font-size:12px;" onclick="restoreBackup('+s+')" title="Restore snapshot from '+b.date+'">⏪ '+b.date+'</button>';}catch(e){}}return out||'<span style="font-size:11px;color:var(--text-dim);align-self:center;">No auto-backups yet (created daily)</span>';})()+
+            '</div>'+
           '</div>'+
           '<button class="btn" onclick="closeModal()">Close</button>'+
         '<button class="btn primary" onclick="syncSaveAndConnect()">Save & Connect</button>'+
@@ -3186,7 +3214,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-10-F";
+var HEATH_BUILD="2026-07-10-H";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
