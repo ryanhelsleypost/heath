@@ -523,8 +523,11 @@ function migrateToV3() {
   if (!S.settings) S.settings = {periodLength:14, anchorDate:null, setupComplete:false};
   if (!S.incomes) S.incomes = [];
   if (!S.piggies) S.piggies = [];
-  // Existing data with periods but no income sources → they're a legacy install
-  if (S.periods.length && !S.incomes.length) {
+  // Existing data with periods but no income sources → they're a legacy install.
+  // "Existing" means REAL data — income entered, bill amounts set, or extra income logged.
+  // Freshly auto-generated periods (all zeros) must NOT trigger migration, or the wizard never shows.
+  const hasRealData = S.periods.some(p => (p.income||0)>0 || (p.bills||[]).some(b=>(b.amount||0)>0) || (p.additionalIncome||[]).length);
+  if (S.periods.length && !S.incomes.length && hasRealData) {
     // Find the most common income amount/name to seed the source
     const active = S.periods.find(p=>p.active) || S.periods[0];
     const amt = active ? (active.income||0) : 0;
@@ -558,9 +561,53 @@ function extendPeriods() {
   const nextStart = fmtDate(addDays(new Date(last.endDate+'T00:00:00'),1));
   const addCount = len===7 ? 52 : 26; // one year
   const newPs = genPeriods(addCount, nextStart);
+  // Template bills always carry (they ARE the recurring engine)
   newPs.forEach(p=>{p.open=false;p.active=false;p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
+
+  // Ask about ad-hoc bills & expenses added directly to periods
+  const carry = confirm('Also carry over bills & expenses that were added directly to periods?\n\n🔁 Recurring → every matching period\n🎄 Holiday / 📅 Annual → once, same time next year\n1️⃣ One-off → skipped');
+  if (carry) {
+    // Scan the last year of periods for non-template bills
+    const lookback = len===7 ? 52 : 26;
+    const recent = S.periods.slice(-lookback);
+    const seen = {}; // dedupe recurring by name|day
+    recent.forEach(function(srcP){
+      (srcP.bills||[]).forEach(function(b){
+        if (b.templateId) return;                    // template bills already handled
+        const rec = b.recurrence||'recurring';       // untagged = carried (recurring)
+        if (rec==='one-off') return;                 // explicitly skipped
+        if (rec==='recurring') {
+          const key = b.name+'|'+(b.day||'');
+          if (seen[key]) return;
+          seen[key] = true;
+          newPs.forEach(function(np){
+            if (b.day==null || billDueInPeriod(b.day, np.startDate, np.endDate)) {
+              if (b.day==null && np!==newPs[0]) return; // day-less recurring: first new period only, user repositions
+              if (np.bills.find(x=>x.name===b.name)) return; // don't double up with template bills
+              np.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',autopay:!!b.autopay,recurrence:'recurring'});
+            }
+          });
+        } else { // holiday / annual → land in the new period covering same month+day, one year later
+          const srcDate = new Date(srcP.startDate+'T00:00:00');
+          const targetMonth = srcDate.getMonth();
+          const useDay = b.day || srcDate.getDate();
+          const target = newPs.find(function(np){
+            const s=new Date(np.startDate+'T00:00:00'), e=new Date(np.endDate+'T00:00:00');
+            const cand=new Date(s.getFullYear(), targetMonth, Math.min(useDay,28));
+            return cand>=s && cand<=e;
+          });
+          if (target && !target.bills.find(x=>x.name===b.name)) {
+            target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',autopay:!!b.autopay,recurrence:rec});
+          }
+        }
+      });
+    });
+    newPs.forEach(function(np){ np.bills.sort((a,c)=>(a.day||99)-(c.day||99)); });
+  }
+
   S.periods = S.periods.concat(newPs);
   persist(); render();
+  alert('Added '+addCount+' periods through '+new Date(newPs[newPs.length-1].endDate+'T00:00:00').toLocaleDateString('en-US',{month:'short',year:'numeric'})+'.');
 }
 
 // Build income entries from S.incomes for a period
@@ -1190,6 +1237,13 @@ function editBillRow(pid,bid){
         '<input class="m-input" id="eb-day" type="number" min="1" max="31" value="'+(b.day||'')+'" placeholder="1–31">'+
         '<span class="m-lbl">Link / URL (payment site, account page — optional)</span>'+
         '<input class="m-input" id="eb-url" type="url" value="'+esc(b.url||'')+'" placeholder="https://…">'+
+        '<span class="m-lbl">Repeats</span>'+
+        '<select class="m-input" id="eb-recurrence">'+
+          '<option value="recurring"'+((b.recurrence||'recurring')==='recurring'?' selected':'')+'>🔁 Recurring — every period it\'s due</option>'+
+          '<option value="one-off"'+(b.recurrence==='one-off'?' selected':'')+'>1️⃣ One-off — this period only, never carried forward</option>'+
+          '<option value="holiday"'+(b.recurrence==='holiday'?' selected':'')+'>🎄 Holiday — once a year, same time</option>'+
+          '<option value="annual"'+(b.recurrence==='annual'?' selected':'')+'>📅 Annual — once a year, same time</option>'+
+        '</select>'+
         '<label style="display:flex;align-items:center;gap:8px;margin:2px 0 10px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
           '<input type="checkbox" id="eb-autopay" '+(b.autopay?'checked':'')+' style="accent-color:var(--amber);width:15px;height:15px;cursor:pointer;">'+
           '<span>⚡ On Autopay <span style="color:var(--text-dim);font-size:11px;">(automatically marks as Pending)</span></span>'+
@@ -1242,6 +1296,7 @@ function saveEditBill(pid,bid){
   b.url=u;
   const ap=!!document.getElementById('eb-autopay')?.checked;
   b.autopay=ap;
+  b.recurrence=document.getElementById('eb-recurrence')?.value||'recurring';
   if(ap&&b.status==='upcoming')b.status='pending'; // autopay bills auto-flip to Pending
   // If it's a recurring bill, offer to propagate changes forward
   if(b.templateId){
@@ -2561,7 +2616,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-09-B";
+var HEATH_BUILD="2026-07-09-D";
 function checkForUpdate(){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
