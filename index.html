@@ -395,7 +395,12 @@ function periodPiggyTotal(p) {
   });
   return sum;
 }
-function billEffAmt(b){ return Math.max(b.amount||0, b.spent||0); }
+function billEffAmt(b){
+  if(!b.spent) return b.amount||0;
+  // Remaining unspent portion — quick spend already deducted from balance
+  var remaining = Math.max(0, (b.amount||0) - (b.spent||0));
+  return remaining;
+}
 function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:billEffAmt(b)),0) + periodPiggyTotal(p); }
 
 function billDueInPeriod(day,s,e) {
@@ -1154,7 +1159,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
         (b.status==='upcoming'?'·':b.status==='pending'?'P':'✓')+'</button>'+
       '<div class="bill-day">'+(b.day||'~')+'</div>'+
       '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+
-      ((b.spent||0)>0&&b.tag!=='quickspend-food'?'<div style="font-size:10.5px;color:'+((b.spent||0)>(b.amount||0)?'var(--red)':'var(--text-dim)')+';">spent '+fmtD(b.spent)+' of '+fmtD(b.amount)+((b.spent||0)>(b.amount||0)?' — over budget':' · '+fmtD(Math.max(0,(b.amount||0)-(b.spent||0)))+' left')+'</div>':'')+'</div>'+
+      ((b.spent||0)>0&&b.tag!=='quickspend-food'?'<div style="font-size:10.5px;color:'+((b.spent||0)>(b.amount||0)?'var(--red)':'var(--green)')+';">'+fmtD(b.spent)+' spent'+((b.spent||0)>(b.amount||0)?' — over by '+fmtD((b.spent||0)-(b.amount||0)):' · '+fmtD(Math.max(0,(b.amount||0)-(b.spent||0)))+' left')+'</div>':'')+'</div>'+
       '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
       '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
@@ -3217,7 +3222,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-10-I";
+var HEATH_BUILD="2026-07-10-J";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
