@@ -1061,19 +1061,19 @@ function renderPeriods() {
   document.getElementById('tab-periods').innerHTML=pastToggle+html;
 }
 
-function isSecCollapsed(k){ return !!(S.settings && S.settings.collapsed && S.settings.collapsed[k]); }
-function toggleSection(k){ if(!S.settings.collapsed) S.settings.collapsed={}; S.settings.collapsed[k]=!S.settings.collapsed[k]; persist(); render(); }
-function secHdr(key,label,lblStyle,sub){
-  var col=isSecCollapsed(key);
+function isSecCollapsed(pid,k){ return !!(S.settings && S.settings.collapsed && S.settings.collapsed[pid+'|'+k]); }
+function toggleSection(pid,k){ if(!S.settings.collapsed) S.settings.collapsed={}; var key=pid+'|'+k; S.settings.collapsed[key]=!S.settings.collapsed[key]; persist(); render(); }
+function secHdr(pid,key,label,lblStyle,sub){
+  var col=isSecCollapsed(pid,key);
   var chev='<span style="display:inline-block;width:11px;text-align:center;color:var(--text-dim);font-size:11px;">'+(col?'\u25B8':'\u25BE')+'</span> ';
-  return '<div class="bill-row sec-hdr" style="cursor:pointer;'+(sub?'padding:3px 14px;':'')+'" onclick="toggleSection(\''+key+'\')"><div class="sec-lbl" style="'+(lblStyle||'')+'">'+chev+label+'</div></div>';
+  return '<div class="bill-row sec-hdr" style="cursor:pointer;'+(sub?'padding:3px 14px;':'')+'" onclick="toggleSection(\''+pid+'\',\''+key+'\')"><div class="sec-lbl" style="'+(lblStyle||'')+'">'+chev+label+'</div></div>';
 }
 
 function renderPeriodBody(p,periodIdx,startBal) {
   let html='';
   // Income section
-  html+=secHdr('income','Income','');
-  html+='<div'+(isSecCollapsed('income')?' style="display:none"':'')+'>';
+  html+=secHdr(p.id,'income','Income','');
+  html+='<div'+(isSecCollapsed(p.id,'income')?' style="display:none"':'')+'>';
   const pcCleared=!!p.incomeCleared;
   // ── Income rows: one per source, with hourly pipeline ──
   if (p.incomeEntries && p.incomeEntries.length) {
@@ -1143,8 +1143,8 @@ function renderPeriodBody(p,periodIdx,startBal) {
         '<button class="btn sm primary" onclick="qsLog(\''+p.id+'\')">Log</button></span>':'')+
     '</div>';
   }
-  html+=secHdr('bills','Bills &amp; Expenses','');
-  html+='<div'+(isSecCollapsed('bills')?' style="display:none"':'')+'>';
+  html+=secHdr(p.id,'bills','Bills &amp; Expenses','');
+  html+='<div'+(isSecCollapsed(p.id,'bills')?' style="display:none"':'')+'>';
   html+=piggyRows;
   if (startBal!==null) {
     const pre = startBal + periodIncomeTotal(p);
@@ -1175,12 +1175,12 @@ function renderPeriodBody(p,periodIdx,startBal) {
       '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
 
-  if(fixed.length){html+=secHdr('fixed','FIXED','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed('fixed'))fixed.forEach(b=>html+=billRow(b));}
-  if(ring.length){html+=secHdr('ring','\uD83D\uDC8D RING','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed('ring'))ring.forEach(b=>html+=billRow(b));}
-  if(variable.length){html+=secHdr('variable','VARIABLE','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed('variable'))variable.forEach(b=>html+=billRow(b));}
-  if(ccpay.length){html+=secHdr('cc','CC PAYMENTS','font-size:10px;color:var(--blue);',true);if(!isSecCollapsed('cc'))ccpay.forEach(b=>html+=billRow(b));}
-  if(vacation.length){html+=secHdr('vacation','\u2708 TRIP / VACATION','font-size:10px;color:#1a5c1a;',true);if(!isSecCollapsed('vacation'))vacation.forEach(b=>html+=billRow(b));}
-  if(seasonal.length){html+=secHdr('seasonal','SEASONAL / ANNUAL','font-size:10px;color:var(--blue-dim);',true);if(!isSecCollapsed('seasonal'))seasonal.forEach(b=>html+=billRow(b));}
+  if(fixed.length){html+=secHdr(p.id,'fixed','FIXED','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed(p.id,'fixed'))fixed.forEach(b=>html+=billRow(b));}
+  if(ring.length){html+=secHdr(p.id,'ring','\uD83D\uDC8D RING','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed(p.id,'ring'))ring.forEach(b=>html+=billRow(b));}
+  if(variable.length){html+=secHdr(p.id,'variable','VARIABLE','font-size:10px;color:var(--text-dim);',true);if(!isSecCollapsed(p.id,'variable'))variable.forEach(b=>html+=billRow(b));}
+  if(ccpay.length){html+=secHdr(p.id,'cc','CC PAYMENTS','font-size:10px;color:var(--blue);',true);if(!isSecCollapsed(p.id,'cc'))ccpay.forEach(b=>html+=billRow(b));}
+  if(vacation.length){html+=secHdr(p.id,'vacation','\u2708 TRIP / VACATION','font-size:10px;color:#1a5c1a;',true);if(!isSecCollapsed(p.id,'vacation'))vacation.forEach(b=>html+=billRow(b));}
+  if(seasonal.length){html+=secHdr(p.id,'seasonal','SEASONAL / ANNUAL','font-size:10px;color:var(--blue-dim);',true);if(!isSecCollapsed(p.id,'seasonal'))seasonal.forEach(b=>html+=billRow(b));}
 
   // Add bill input
   var showAddBForm = S.ui_addBill === p.id;
@@ -3234,7 +3234,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-31-K";
+var HEATH_BUILD="2026-07-31-L";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
