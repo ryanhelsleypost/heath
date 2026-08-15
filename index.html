@@ -625,8 +625,9 @@ function extendPeriods() {
         if(seenInc[key])return;
         seenInc[key]=true;
         newPs.forEach(function(np){
+          if(!billDueInPeriod(a.day==null?null:a.day, np.startDate, np.endDate))return;
           if(!np.additionalIncome)np.additionalIncome=[];
-          np.additionalIncome.push({id:uid(),seriesId:a.seriesId||key,name:a.name,amount:a.amount,recurrence:'recurring'});
+          np.additionalIncome.push({id:uid(),seriesId:a.seriesId||key,name:a.name,amount:a.amount,day:(a.day==null?null:a.day),recurrence:'recurring'});
         });
       });
     }
@@ -1114,7 +1115,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
   }
   (p.additionalIncome||[]).forEach(function(a,ai){
     const aCl=a.status==='cleared';
-    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
   });
   var showAddlForm = S.ui_addAddl === p.id;
   if (!showAddlForm) {
@@ -1135,8 +1136,13 @@ function renderPeriodBody(p,periodIdx,startBal) {
         '</div>'+
       '</div>'+
       '<label style="display:flex;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:var(--text-mid);cursor:pointer;">'+
-        '<input type="checkbox" id="ai-rec-'+p.id+'" style="width:16px;height:16px;"> 🔁 Recurring <span style="color:var(--text-dim);font-size:11px;">(this + all future periods)</span>'+
+        '<input type="checkbox" id="ai-rec-'+p.id+'" onchange="var r=document.getElementById(\'ai-recrow-'+p.id+'\');if(r)r.style.display=this.checked?\'flex\':\'none\'" style="width:16px;height:16px;"> 🔁 Recurring <span style="color:var(--text-dim);font-size:11px;">(this + future periods)</span>'+
       '</label>'+
+      '<div id="ai-recrow-'+p.id+'" style="display:none;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--text-mid);flex-wrap:wrap;">'+
+        '<span>Repeats on day</span>'+
+        '<input class="add-input" id="ai-day-'+p.id+'" type="number" min="1" max="31" placeholder="e.g. 1" style="width:72px;">'+
+        '<span style="color:var(--text-dim);font-size:11px;">of the month · blank = every period</span>'+
+      '</div>'+
     '</div>';
   }
   html+='</div>'; // end Income section
@@ -1703,16 +1709,27 @@ function saveAddIncome(pid){
   const amt=parseFloat(document.getElementById('ai-amt-'+pid)?.value)||0;
   const recurring=!!document.getElementById('ai-rec-'+pid)?.checked;
   if(recurring){
-    // Recurring income: place in this + every future period (mirrors recurring bills)
+    // Recurring income: place in this + every future period whose date range contains the due day
+    // (blank day = every period, same as recurring bills via billDueInPeriod)
+    const dayEl=document.getElementById('ai-day-'+pid);
+    const day=dayEl&&dayEl.value.trim()?parseInt(dayEl.value):null;
     const seriesId=uid();
     const pi=S.periods.findIndex(pp=>pp.id===pid);
+    let placedHere=false,firstPlaced=null,count=0;
     S.periods.forEach((fp,fi)=>{
       if(fi<pi)return;
+      if(!billDueInPeriod(day,fp.startDate,fp.endDate))return;
       if(!fp.additionalIncome)fp.additionalIncome=[];
-      fp.additionalIncome.push({id:uid(),seriesId:seriesId,name:name,amount:amt,recurrence:'recurring'});
+      fp.additionalIncome.push({id:uid(),seriesId:seriesId,name:name,amount:amt,day:day,recurrence:'recurring'});
+      count++;
+      if(fi===pi)placedHere=true;
+      if(!firstPlaced)firstPlaced=fp;
     });
     S.ui_addAddl=null;
     persist();render();
+    if(!placedHere&&firstPlaced){
+      alert('"'+name+'" is recurring, but day '+day+' doesn\'t fall in this pay period — its first occurrence starts in '+fmtDs(firstPlaced.startDate)+' – '+fmtDs(firstPlaced.endDate)+'. Added to '+count+' period'+(count===1?'':'s')+'.');
+    }
     return;
   }
   if(!p.additionalIncome)p.additionalIncome=[];
@@ -3297,7 +3314,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-08-14-INCREC";
+var HEATH_BUILD="2026-08-14-INCDAY";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
