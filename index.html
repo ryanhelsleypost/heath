@@ -613,6 +613,25 @@ function extendPeriods() {
   // Template bills always carry (they ARE the recurring engine)
   newPs.forEach(p=>{p.open=false;p.active=false;p.bills=buildBillsForPeriod(p);p.incomeEntries=buildIncomeEntriesForPeriod(p);});
 
+  // Recurring additional income always carries too (like template bills)
+  (function(){
+    const lookback = len===7 ? 52 : 26;
+    const recent = S.periods.slice(-lookback);
+    const seenInc = {};
+    for(let i=recent.length-1;i>=0;i--){
+      (recent[i].additionalIncome||[]).forEach(function(a){
+        if((a.recurrence||'')!=='recurring')return;
+        const key=a.seriesId||('name:'+a.name);
+        if(seenInc[key])return;
+        seenInc[key]=true;
+        newPs.forEach(function(np){
+          if(!np.additionalIncome)np.additionalIncome=[];
+          np.additionalIncome.push({id:uid(),seriesId:a.seriesId||key,name:a.name,amount:a.amount,recurrence:'recurring'});
+        });
+      });
+    }
+  })();
+
   // Ask about ad-hoc bills & expenses added directly to periods
   const carry = confirm('Also carry over bills & expenses that were added directly to periods?\n\n🔁 Recurring → every matching period\n🎄 Holiday / 📅 Annual → once, same time next year\n1️⃣ One-off → skipped');
   if (carry) {
@@ -1095,7 +1114,7 @@ function renderPeriodBody(p,periodIdx,startBal) {
   }
   (p.additionalIncome||[]).forEach(function(a,ai){
     const aCl=a.status==='cleared';
-    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
   });
   var showAddlForm = S.ui_addAddl === p.id;
   if (!showAddlForm) {
@@ -1115,6 +1134,9 @@ function renderPeriodBody(p,periodIdx,startBal) {
           '<button class="btn sm" title="Cancel (Esc)" onclick="S.ui_addAddl=null;render()">✕ Cancel</button>'+
         '</div>'+
       '</div>'+
+      '<label style="display:flex;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:var(--text-mid);cursor:pointer;">'+
+        '<input type="checkbox" id="ai-rec-'+p.id+'" style="width:16px;height:16px;"> 🔁 Recurring <span style="color:var(--text-dim);font-size:11px;">(this + all future periods)</span>'+
+      '</label>'+
     '</div>';
   }
   html+='</div>'; // end Income section
@@ -1679,6 +1701,20 @@ function saveAddIncome(pid){
   const p=S.periods.find(pp=>pp.id===pid);if(!p)return;
   const name=(document.getElementById('ai-name-'+pid)?.value||'Additional Income').trim();
   const amt=parseFloat(document.getElementById('ai-amt-'+pid)?.value)||0;
+  const recurring=!!document.getElementById('ai-rec-'+pid)?.checked;
+  if(recurring){
+    // Recurring income: place in this + every future period (mirrors recurring bills)
+    const seriesId=uid();
+    const pi=S.periods.findIndex(pp=>pp.id===pid);
+    S.periods.forEach((fp,fi)=>{
+      if(fi<pi)return;
+      if(!fp.additionalIncome)fp.additionalIncome=[];
+      fp.additionalIncome.push({id:uid(),seriesId:seriesId,name:name,amount:amt,recurrence:'recurring'});
+    });
+    S.ui_addAddl=null;
+    persist();render();
+    return;
+  }
   if(!p.additionalIncome)p.additionalIncome=[];
   p.additionalIncome.push({id:uid(),name,amount:amt});
   S.ui_addAddl=null;
@@ -1708,7 +1744,34 @@ function saveAddl(pid,idx){
   if(n)a.name=n;if(!isNaN(v))a.amount=v;
   persist();closeModal();render();
 }
-function delAddl(pid,idx){const p=S.periods.find(pp=>pp.id===pid);if(p?.additionalIncome){p.additionalIncome.splice(idx,1);persist();render();}}
+function delAddl(pid,idx){
+  const p=S.periods.find(pp=>pp.id===pid);const a=p?.additionalIncome?.[idx];if(!a)return;
+  if(a.recurrence==='recurring'&&a.seriesId){
+    document.getElementById('modal-root').innerHTML=
+      '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()">'+
+        '<div class="modal sm"><h2>Delete Recurring Income</h2>'+
+          '<div style="font-size:14px;color:var(--text-mid);line-height:1.6;margin:4px 0 14px;"><b style="color:var(--text);">'+esc(a.name)+'</b> is recurring income.<br>Delete just this one, or remove the whole series from this period forward?</div>'+
+          '<div class="m-actions" style="flex-direction:column;gap:8px;">'+
+            '<button class="btn" data-pid="'+pid+'" data-sid="'+a.seriesId+'" onclick="delAddlSeries(this.dataset.pid,this.dataset.sid)">Delete series (this + future)</button>'+
+            '<button class="btn" data-pid="'+pid+'" data-id="'+a.id+'" onclick="delAddlOne(this.dataset.pid,this.dataset.id)">Just this one</button>'+
+            '<button class="btn primary" onclick="closeModal()">Cancel</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    return;
+  }
+  if(p?.additionalIncome){p.additionalIncome.splice(idx,1);persist();render();}
+}
+function delAddlOne(pid,id){
+  const p=S.periods.find(pp=>pp.id===pid);if(!p||!p.additionalIncome)return;
+  p.additionalIncome=p.additionalIncome.filter(x=>x.id!==id);
+  persist();closeModal();render();
+}
+function delAddlSeries(pid,seriesId){
+  const pi=S.periods.findIndex(pp=>pp.id===pid);if(pi<0){closeModal();return;}
+  S.periods.forEach((p,i)=>{ if(i<pi)return; if(p.additionalIncome)p.additionalIncome=p.additionalIncome.filter(x=>x.seriesId!==seriesId); });
+  persist();closeModal();render();
+}
 // ── Income entry: toggle cleared ──
 function toggleEntryCleared(pid, ei) {
   const p=S.periods.find(pp=>pp.id===pid); if(!p||!p.incomeEntries||!p.incomeEntries[ei])return;
@@ -3234,7 +3297,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-07-31-L";
+var HEATH_BUILD="2026-08-14-INCREC";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
