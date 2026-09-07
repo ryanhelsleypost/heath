@@ -968,7 +968,7 @@ function renderHeader() {
   let negCount=0,warnCount=0,tightCount=0;
   const ai=S.periods.findIndex(p=>p.active);
   bals.forEach(function(b,i){
-    if(i<=ai||b===null)return;
+    if(i<ai||b===null)return;             // include the active/current period; skip only past ones
     if(b&&b.end<0)negCount++;
     if(b&&b.end<500)warnCount++;          // includes negatives
     else if(b&&b.end<1000)tightCount++;   // $500–$999 only
@@ -976,7 +976,7 @@ function renderHeader() {
   // Build lists of affected period ids
   var negPeriods = [], warnPeriods = [], tightPeriods = [];
   bals.forEach(function(b,i) {
-    if (i <= ai || b === null) return;
+    if (i < ai || b === null) return;                   // include the active/current period; skip only past ones
     if (b && b.end < 0) negPeriods.push(i);
     if (b && b.end < 500) warnPeriods.push(i);          // includes negatives
     else if (b && b.end < 1000) tightPeriods.push(i);   // $500–$999 only
@@ -3314,7 +3314,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-08-14-INCDAY";
+var HEATH_BUILD="2026-09-07-THRESH";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
