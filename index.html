@@ -133,6 +133,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .bill-name a.bill-link:hover{border-bottom-color:var(--blue);}
 .bill-name.struck a.bill-link{color:var(--text-dim);text-decoration:line-through;border-bottom:none;}
 .bill-amt{font-size:14px;font-weight:500;min-width:68px;text-align:right;}
+.bill-ico{display:inline-flex;align-items:center;justify-content:center;width:18px;margin-right:6px;font-size:13px;line-height:1;vertical-align:-2px;flex-shrink:0;}
+.bill-ico svg{width:15px;height:15px;display:block;}
+.ver-chk{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:700;margin-right:5px;vertical-align:1px;}
+.ico-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:5px;margin:2px 0 10px;}
+.ico-opt{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);color:var(--text-mid);font-family:var(--mono);font-size:10px;cursor:pointer;}
+.ico-opt .bill-ico{margin:0;width:auto;font-size:17px;}
+.ico-opt .bill-ico svg{width:18px;height:18px;}
+.ico-opt.sel{border-color:var(--green);color:var(--green);background:var(--green-dim);}
 .bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
 .bill-acts{display:flex;gap:5px;opacity:1;}
 .act-btn{font-size:16px;line-height:1;padding:5px 7px;border:none;border-radius:6px;background:transparent;cursor:pointer;opacity:1;-webkit-tap-highlight-color:transparent;}
@@ -401,6 +409,51 @@ function billEffAmt(b){
   var remaining = Math.max(0, (b.amount||0) - (b.spent||0));
   return remaining;
 }
+// ── Bill type icons (build 2026-09-30-BILLICONS) ──
+const BILL_ICONS=[
+  {k:'electric',l:'Electric',svg:'<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="#facc15"/></svg>'},
+  {k:'gas',l:'Gas',svg:'<svg viewBox="0 0 24 24"><path d="M7 19a5 5 0 0 1-.6-9.96A6.5 6.5 0 0 1 18.8 10 4.5 4.5 0 0 1 18 19z" fill="#22c55e"/></svg>'},
+  {k:'water',l:'Water',e:'💧'},
+  {k:'internet',l:'Phone/Net',e:'📶'},
+  {k:'home',l:'Home',e:'🏠'},
+  {k:'car',l:'Car',e:'🚗'},
+  {k:'insurance',l:'Insurance',e:'🛡️'},
+  {k:'cc',l:'Credit card',e:'💳'},
+  {k:'food',l:'Food',e:'🍔'},
+  {k:'medical',l:'Medical',e:'🩺'},
+  {k:'subs',l:'Streaming',e:'📺'},
+  {k:'kids',l:'Kids',e:'🎒'},
+  {k:'pets',l:'Pets',e:'🐾'},
+  {k:'travel',l:'Travel',e:'✈️'},
+  {k:'christmas',l:'Christmas',e:'🎄'},
+  {k:'misc',l:'Misc',e:'💲'}
+];
+function billIconDef(k){ return BILL_ICONS.find(function(x){return x.k===k;})||null; }
+function billIconKey(b){
+  if(!b) return '';
+  if(b.icon!=null) return b.icon;
+  if(b.templateId){ var t=(S.templates||[]).find(function(tt){return tt.id===b.templateId;}); if(t&&t.icon) return t.icon; }
+  if(b.tag==='cc-payment') return 'cc';
+  return '';
+}
+function billIconHtml(k,title){
+  var d=billIconDef(k); if(!d) return '';
+  return '<span class="bill-ico" title="'+esc(title||d.l)+'">'+(d.svg||d.e)+'</span>';
+}
+function iconPickerHtml(inputId,selKey){
+  var opts=[{k:'',l:'None',e:'—'}].concat(BILL_ICONS);
+  return '<input type="hidden" id="'+inputId+'" value="'+esc(selKey||'')+'">'+
+    '<div class="ico-grid" id="'+inputId+'-grid">'+opts.map(function(o){
+      return '<button type="button" class="ico-opt'+((selKey||'')===o.k?' sel':'')+'" data-k="'+o.k+'" onclick="pickIcon(\''+inputId+'\',this)">'+
+        '<span class="bill-ico">'+(o.svg||o.e)+'</span>'+esc(o.l)+'</button>';
+    }).join('')+'</div>';
+}
+function pickIcon(inputId,btn){
+  var inp=document.getElementById(inputId); if(inp) inp.value=btn.dataset.k||'';
+  var g=document.getElementById(inputId+'-grid');
+  if(g) g.querySelectorAll('.ico-opt').forEach(function(x){x.classList.toggle('sel',x===btn);});
+}
+const INCOME_ICON='<span class="bill-ico" title="Income">💵</span>';
 function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:billEffAmt(b)),0) + periodPiggyTotal(p); }
 
 function billDueInPeriod(day,s,e) {
@@ -522,7 +575,7 @@ function buildBillsForPeriod(p) {
   (S.templates||[]).forEach(function(t) {
     if (t.recurrence==='weekly') {
       weeklyDatesInPeriod(t.weekday==null?0:t.weekday, p.startDate, p.endDate).forEach(function(d){
-        bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:d.getDate(),weekday:t.weekday,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',autopay:!!t.autopay,recurrence:'weekly'});
+        bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:d.getDate(),weekday:t.weekday,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,autopay:!!t.autopay,recurrence:'weekly'});
       });
       return;
     }
@@ -535,7 +588,7 @@ function buildBillsForPeriod(p) {
       const inRange=(dueThis>=s&&dueThis<=e)||(dueNext>=s&&dueNext<=e);
       if(!inRange) return;
     }
-    bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',autopay:!!t.autopay,recurrence:t.recurrence||'recurring'});
+    bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,autopay:!!t.autopay,recurrence:t.recurrence||'recurring'});
   });
   bills.sort((a,b)=>(a.day||99)-(b.day||99));
   return bills;
@@ -653,7 +706,7 @@ function extendPeriods() {
             if (b.day==null || billDueInPeriod(b.day, np.startDate, np.endDate)) {
               if (b.day==null && np!==newPs[0]) return; // day-less recurring: first new period only, user repositions
               if (np.bills.find(x=>x.name===b.name)) return; // don't double up with template bills
-              np.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',autopay:!!b.autopay,recurrence:'recurring'});
+              np.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,autopay:!!b.autopay,recurrence:'recurring'});
             }
           });
         } else { // holiday / annual → land in the new period covering same month+day, one year later
@@ -666,7 +719,7 @@ function extendPeriods() {
             return cand>=s && cand<=e;
           });
           if (target && !target.bills.find(x=>x.name===b.name)) {
-            target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',autopay:!!b.autopay,recurrence:rec});
+            target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,autopay:!!b.autopay,recurrence:rec});
           }
         }
       });
@@ -1108,14 +1161,14 @@ function renderPeriodBody(p,periodIdx,startBal) {
       const hoursCtl = inc.type==='hourly' && !clr
         ? '<span style="font-size:11px;color:var(--text-dim);margin-left:8px;">'+(e.hours!=null&&e.hours>0?e.hours+'h':'')+'</span>'
         : '';
-      html+='<div class="bill-row"><div class="status-btn'+(clr?' cleared':'')+'" onclick="toggleEntryCleared(\''+p.id+'\','+ei+')" title="'+(clr?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(clr?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(clr?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(inc.name)+tierBadge+hoursCtl+'</div><div class="bill-amt in" style="'+(clr?'opacity:.35;':'')+'">'+(clr?'—':'+'+fmtD(res.value))+'</div><div class="bill-acts"><button class="act-btn" onclick="editIncomeEntry(\''+p.id+'\','+ei+')">✏️</button></div></div>';
+      html+='<div class="bill-row"><div class="status-btn'+(clr?' cleared':'')+'" onclick="toggleEntryCleared(\''+p.id+'\','+ei+')" title="'+(clr?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(clr?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(clr?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(inc.name)+tierBadge+hoursCtl+'</div><div class="bill-amt in" style="'+(clr?'opacity:.35;':'')+'">'+(clr?'—':'+'+fmtD(res.value))+'</div><div class="bill-acts"><button class="act-btn" onclick="editIncomeEntry(\''+p.id+'\','+ei+')">✏️</button></div></div>';
     });
   } else {
-    html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button></div></div>';
   }
   (p.additionalIncome||[]).forEach(function(a,ai){
     const aCl=a.status==='cleared';
-    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
   });
   var showAddlForm = S.ui_addAddl === p.id;
   if (!showAddlForm) {
@@ -1197,9 +1250,9 @@ function renderPeriodBody(p,periodIdx,startBal) {
       '<button class="status-btn '+b.status+'" title="'+statusTip+'" onclick="cycleStatus(\''+p.id+'\',\''+b.id+'\')">'+
         (b.status==='upcoming'?'·':b.status==='pending'?'P':'✓')+'</button>'+
       '<div class="bill-day">'+(b.day||'~')+'</div>'+
-      '<div class="bill-name'+(isCl?' struck':'')+'">'+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+
+      '<div class="bill-name'+(isCl?' struck':'')+'">'+billIconHtml(billIconKey(b))+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+
       ((b.spent||0)>0&&b.tag!=='quickspend-food'?'<div style="font-size:10.5px;color:'+((b.spent||0)>(b.amount||0)?'var(--red)':'var(--green)')+';">'+fmtD(b.spent)+' spent'+((b.spent||0)>(b.amount||0)?' — over by '+fmtD((b.spent||0)-(b.amount||0)):' · '+fmtD(Math.max(0,(b.amount||0)-(b.spent||0)))+' left')+'</div>':'')+'</div>'+
-      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
+      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(b.verified?'<span class="ver-chk" title="Amount verified">✓</span>':'')+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
       '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
 
@@ -1454,6 +1507,12 @@ function editBillRow(pid,bid){
         '<input class="m-input" id="eb-name" value="'+esc(b.name)+'" placeholder="Bill name">'+
         '<span class="m-lbl">Amount ($)</span>'+
         '<input class="m-input" id="eb-amount" type="number" min="0" step="0.01" value="'+b.amount+'" placeholder="0.00">'+
+        '<label style="display:flex;align-items:center;gap:8px;margin:-2px 0 10px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+          '<input type="checkbox" id="eb-verified" '+(b.verified?'checked':'')+' style="accent-color:#16a34a;width:15px;height:15px;cursor:pointer;">'+
+          '<span><span class="ver-chk">✓</span>Amount verified <span style="color:var(--text-dim);font-size:11px;">(this occurrence only)</span></span>'+
+        '</label>'+
+        '<span class="m-lbl">Type</span>'+
+        iconPickerHtml('eb-icon',billIconKey(b))+
         '<div id="eb-day-wrap" style="display:'+(b.recurrence==='weekly'?'none':'')+';"><span class="m-lbl">Due Day (blank = variable)</span>'+
         '<input class="m-input" id="eb-day" type="number" min="1" max="31" value="'+(b.day||'')+'" placeholder="1–31"></div>'+
         '<div id="eb-weekday-wrap" style="display:'+(b.recurrence==='weekly'?'':'none')+';"><span class="m-lbl">Day of Week</span>'+
@@ -1522,21 +1581,26 @@ function saveEditBill(pid,bid){
   b.url=u;
   const ap=!!document.getElementById('eb-autopay')?.checked;
   b.autopay=ap;
+  b.verified=!!document.getElementById('eb-verified')?.checked;
+  const oldIcon=billIconKey(b);
+  const ic=(document.getElementById('eb-icon')?.value)||'';
+  const iconChanged=ic!==oldIcon;
+  b.icon=ic;
   b.recurrence=rec;
   if(ap&&b.status==='upcoming')b.status='pending'; // autopay bills auto-flip to Pending
   // If it's a recurring bill, offer to propagate changes forward
   if(b.templateId){
-    _pendingRipple={type:'template',pid:pid,tplId:b.templateId,n:n,av:av,day:b.day,weekday:b.weekday,rec:rec,u:u,ap:ap};
+    _pendingRipple={type:'template',pid:pid,tplId:b.templateId,n:n,av:av,day:b.day,weekday:b.weekday,rec:rec,u:u,ap:ap,ic:ic};
     showRippleChoice('<b style="color:var(--text);">'+esc(b.name)+'</b> is a recurring bill.<br>Apply these changes to all future periods, or just this one?');
     return;
-  } else if(urlChanged){
-    // Non-template bill: offer to ripple the URL forward to same-named bills in future periods
+  } else if(urlChanged||iconChanged){
+    // Non-template bill: offer to ripple the URL / type icon forward to same-named bills in future periods
     const pi=S.periods.findIndex(pp=>pp.id===pid);
     let matches=0;
     S.periods.forEach((fp,fi)=>{if(fi>pi)fp.bills.forEach(bb=>{if(bb.name===oldName||bb.name===b.name)matches++;});});
     if(matches>0){
-      _pendingRipple={type:'name',pid:pid,oldName:oldName,newName:b.name,u:u};
-      showRippleChoice('Apply this link to '+matches+' future <b style="color:var(--text);">'+esc(b.name)+'</b> bill'+(matches>1?'s':'')+', or just this one?');
+      _pendingRipple={type:'name',pid:pid,oldName:oldName,newName:b.name,u:u,urlChanged:urlChanged,ic:ic,iconChanged:iconChanged};
+      showRippleChoice('Apply this '+(urlChanged&&iconChanged?'link and type':urlChanged?'link':'type')+' to '+matches+' future <b style="color:var(--text);">'+esc(b.name)+'</b> bill'+(matches>1?'s':'')+', or just this one?');
       return;
     }
   }
@@ -1569,7 +1633,8 @@ function rippleApplyAll(){
       S.periods.forEach((fp,fi)=>{
         if(fi<=pi)return;
         fp.bills.filter(bb=>bb.templateId===r.tplId).forEach(function(fb){
-          if(r.n)fb.name=r.n;if(!isNaN(r.av))fb.amount=r.av;
+          if(r.n)fb.name=r.n;if(!isNaN(r.av)&&!fb.verified)fb.amount=r.av;
+          if(r.ic!=null)fb.icon=r.ic;
           if(r.rec!=='weekly'&&r.day!==null)fb.day=r.day;
           if(r.weekday!=null)fb.weekday=r.weekday;
           if(r.rec)fb.recurrence=r.rec;
@@ -1583,6 +1648,7 @@ function rippleApplyAll(){
       if(tplIdx>-1){
         if(r.n)S.templates[tplIdx].name=r.n;if(!isNaN(r.av))S.templates[tplIdx].amount=r.av;
         S.templates[tplIdx].url=r.u;S.templates[tplIdx].autopay=r.ap;
+        if(r.ic!=null)S.templates[tplIdx].icon=r.ic;
         if(r.rec)S.templates[tplIdx].recurrence=r.rec;
         if(r.weekday!=null)S.templates[tplIdx].weekday=r.weekday;
         if(r.rec!=='weekly'&&r.day!==null)S.templates[tplIdx].day=r.day;
@@ -1590,7 +1656,7 @@ function rippleApplyAll(){
     } else if(r.type==='name'){
       S.periods.forEach((fp,fi)=>{
         if(fi<=pi)return;
-        fp.bills.forEach(bb=>{if(bb.name===r.oldName||bb.name===r.newName)bb.url=r.u;});
+        fp.bills.forEach(bb=>{if(bb.name===r.oldName||bb.name===r.newName){if(r.urlChanged!==false)bb.url=r.u;if(r.iconChanged)bb.icon=r.ic;}});
       });
     }
   }
@@ -2164,6 +2230,8 @@ function editTemplate(i) {
         '</div>'+
         '<span class="m-lbl" style="margin-top:8px;">Link (optional)</span>'+
         '<input class="m-input" id="et-url" value="'+esc(t.url||'')+'" placeholder="https://pay.example.com">'+
+        '<span class="m-lbl" style="margin-top:8px;">Type</span>'+
+        iconPickerHtml('et-icon',t.icon||'')+
         '<div class="m-actions">'+
           '<button class="btn" onclick="renderModal()">Cancel</button>'+
           '<button class="btn primary" data-i="'+i+'" onclick="saveTemplate(parseInt(this.dataset.i))">Save</button>'+
@@ -2190,6 +2258,7 @@ function saveTemplate(i) {
   if(!tpl)return;
   tpl.name=name; tpl.amount=Math.round(amt); tpl.day=day; tpl.recurrence=rec;
   tpl.autopay=ap; tpl.url=url;
+  const prevTplIcon=tpl.icon||''; tpl.icon=(document.getElementById('et-icon')?.value)||'';
   tpl.weekday=(rec==='weekly'&&!isNaN(weekday))?weekday:null;
   tpl.month=((rec==='annual'||rec==='holiday')&&!isNaN(month))?month:null;
   if(isNew) S.templates.push(tpl);
@@ -2200,7 +2269,8 @@ function saveTemplate(i) {
       if(pi<=ai)return;
       p.bills.forEach(function(b){
         if(b.templateId===tpl.id&&b.status!=='cleared'){
-          b.name=tpl.name;b.amount=tpl.amount;b.day=tpl.day;b.autopay=tpl.autopay;b.url=tpl.url;
+          b.name=tpl.name;if(!b.verified)b.amount=tpl.amount;b.day=tpl.day;b.autopay=tpl.autopay;b.url=tpl.url;
+          if(tpl.icon!==prevTplIcon)b.icon=tpl.icon;
           b.recurrence=tpl.recurrence;
           if(tpl.autopay&&b.status==='upcoming')b.status='pending';
         }
@@ -2232,7 +2302,7 @@ function rebuildFuture(){
   S.periods.forEach((p,i)=>{
     if(i<=ai)return;
     const nb=buildBillsForPeriod(p);
-    const rebuilt=nb.map(b=>{const ex=p.bills.find(e=>e.templateId&&e.templateId===b.templateId);return ex?{...b,status:ex.status,url:ex.url||b.url,keepHere:ex.keepHere}:b;});
+    const rebuilt=nb.map(b=>{const ex=p.bills.find(e=>e.templateId&&e.templateId===b.templateId);return ex?{...b,status:ex.status,url:ex.url||b.url,keepHere:ex.keepHere,icon:ex.icon!=null?ex.icon:b.icon,verified:ex.verified,amount:ex.verified?ex.amount:b.amount}:b;});
     const oneOffs=p.bills.filter(e=>!e.templateId); // preserve one-offs untouched
     p.bills=rebuilt.concat(oneOffs).sort((a,c)=>(a.day||99)-(c.day||99));
   });
@@ -3314,7 +3384,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-07-THRESH";
+var HEATH_BUILD="2026-09-30-BILLICONS";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
