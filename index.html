@@ -135,7 +135,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
 .bill-amt{font-size:14px;font-weight:500;min-width:68px;text-align:right;}
 .bill-ico{display:inline-flex;align-items:center;justify-content:center;width:18px;margin-right:6px;font-size:13px;line-height:1;vertical-align:-2px;flex-shrink:0;}
 .bill-ico svg{width:15px;height:15px;display:block;}
-.ver-chk{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#16a34a;color:#fff;font-size:10px;font-weight:700;margin-right:5px;vertical-align:1px;}
+.ver-chk{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#16a34a;border:1.5px solid #16a34a;color:#fff;font-size:10px;font-weight:700;margin-right:5px;vertical-align:1px;box-sizing:border-box;}
+.ver-chk.off{background:transparent;border-color:#3f6b4c;color:#3f6b4c;}
+button.ver-chk{padding:0;font-family:inherit;cursor:pointer;line-height:1;}
+button.ver-chk.off:hover{border-color:#16a34a;color:#16a34a;}
+.pay-via{font-size:10.5px;color:var(--blue);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ico-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:5px;margin:2px 0 10px;}
 .ico-opt{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border:1px solid var(--border2);border-radius:5px;background:var(--surface2);color:var(--text-mid);font-family:var(--mono);font-size:10px;cursor:pointer;}
 .ico-opt .bill-ico{margin:0;width:auto;font-size:17px;}
@@ -575,7 +579,7 @@ function buildBillsForPeriod(p) {
   (S.templates||[]).forEach(function(t) {
     if (t.recurrence==='weekly') {
       weeklyDatesInPeriod(t.weekday==null?0:t.weekday, p.startDate, p.endDate).forEach(function(d){
-        bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:d.getDate(),weekday:t.weekday,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,autopay:!!t.autopay,recurrence:'weekly'});
+        bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:d.getDate(),weekday:t.weekday,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,payMethod:t.payMethod||undefined,autopay:!!t.autopay,recurrence:'weekly'});
       });
       return;
     }
@@ -588,7 +592,7 @@ function buildBillsForPeriod(p) {
       const inRange=(dueThis>=s&&dueThis<=e)||(dueNext>=s&&dueNext<=e);
       if(!inRange) return;
     }
-    bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,autopay:!!t.autopay,recurrence:t.recurrence||'recurring'});
+    bills.push({id:uid(),templateId:t.id,name:t.name,amount:t.amount,day:t.day,status:t.autopay?'pending':'upcoming',category:t.category||'fixed',tag:'',url:t.url||'',icon:t.icon||undefined,payMethod:t.payMethod||undefined,autopay:!!t.autopay,recurrence:t.recurrence||'recurring'});
   });
   bills.sort((a,b)=>(a.day||99)-(b.day||99));
   return bills;
@@ -706,7 +710,7 @@ function extendPeriods() {
             if (b.day==null || billDueInPeriod(b.day, np.startDate, np.endDate)) {
               if (b.day==null && np!==newPs[0]) return; // day-less recurring: first new period only, user repositions
               if (np.bills.find(x=>x.name===b.name)) return; // don't double up with template bills
-              np.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,autopay:!!b.autopay,recurrence:'recurring'});
+              np.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,payMethod:b.payMethod,autopay:!!b.autopay,recurrence:'recurring'});
             }
           });
         } else { // holiday / annual → land in the new period covering same month+day, one year later
@@ -719,7 +723,7 @@ function extendPeriods() {
             return cand>=s && cand<=e;
           });
           if (target && !target.bills.find(x=>x.name===b.name)) {
-            target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,autopay:!!b.autopay,recurrence:rec});
+            target.bills.push({id:uid(),templateId:null,name:b.name,amount:b.amount,day:b.day,status:b.autopay?'pending':'upcoming',category:b.category||'fixed',tag:b.tag||'',url:b.url||'',icon:b.icon,payMethod:b.payMethod,autopay:!!b.autopay,recurrence:rec});
           }
         }
       });
@@ -1251,8 +1255,9 @@ function renderPeriodBody(p,periodIdx,startBal) {
         (b.status==='upcoming'?'·':b.status==='pending'?'P':'✓')+'</button>'+
       '<div class="bill-day">'+(b.day||'~')+'</div>'+
       '<div class="bill-name'+(isCl?' struck':'')+'">'+billIconHtml(billIconKey(b))+(b.url?'<a class="bill-link" href="'+esc(b.url)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="'+esc(b.url)+'">'+esc(b.name)+' <span style="font-size:11px;">↗</span></a>':esc(b.name))+(b.autopay?'<span style="font-size:11px;color:var(--amber);" title="On Autopay — automatically marked Pending"> ⚡AP</span>':'')+(isRing?'<span style="font-size:11px;color:var(--text-dim);"> 💍</span>':'')+(isCC?'<span style="font-size:11px;color:var(--blue);"> CC</span>':'')+
+      (b.payMethod?'<div class="pay-via" title="Payment method">via '+esc(b.payMethod)+'</div>':'')+
       ((b.spent||0)>0&&b.tag!=='quickspend-food'?'<div style="font-size:10.5px;color:'+((b.spent||0)>(b.amount||0)?'var(--red)':'var(--green)')+';">'+fmtD(b.spent)+' spent'+((b.spent||0)>(b.amount||0)?' — over by '+fmtD((b.spent||0)-(b.amount||0)):' · '+fmtD(Math.max(0,(b.amount||0)-(b.spent||0)))+' left')+'</div>':'')+'</div>'+
-      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+(b.verified?'<span class="ver-chk" title="Amount verified">✓</span>':'')+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
+      '<div class="bill-amt '+(isCl?'dim':isVac?'vac':'out')+'">'+'<button class="ver-chk'+(b.verified?'':' off')+'" title="'+(b.verified?'Amount verified — tap to unverify':'Tap to mark this amount verified')+'" onclick="event.stopPropagation();toggleVerified(\''+p.id+'\',\''+b.id+'\')">✓</button>'+(isCl?'—':'-'+fmtD(billEffAmt(b)))+'</div>'+
       '<div class="bill-acts" style="position:relative;">'+(function(){var _le=(b._history&&b._history.length)?b._history[b._history.length-1]:null;var _ht=_le?(esc(_le.who)+' \u00b7 '+fmtHistoryTime(_le.when)+' \u00b7 '+_le.action):'No changes tracked';return '<span class="act-btn" title="'+_ht+'" style="font-size:11px;cursor:help;opacity:.35;" onclick="event.stopPropagation();toggleHistoryTip(this)">\uD83D\uDC41</span>';}())+'<button class="act-btn" onclick="editBillRow(\''+p.id+'\',\''+b.id+'\')">✏️</button><button class="act-btn del" onclick="delBill(\''+p.id+'\',\''+b.id+'\')">🗑️</button></div></div>';
   }
 
@@ -1509,7 +1514,7 @@ function editBillRow(pid,bid){
         '<input class="m-input" id="eb-amount" type="number" min="0" step="0.01" value="'+b.amount+'" placeholder="0.00">'+
         '<label style="display:flex;align-items:center;gap:8px;margin:-2px 0 10px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
           '<input type="checkbox" id="eb-verified" '+(b.verified?'checked':'')+' style="accent-color:#16a34a;width:15px;height:15px;cursor:pointer;">'+
-          '<span><span class="ver-chk">✓</span>Amount verified <span style="color:var(--text-dim);font-size:11px;">(this occurrence only)</span></span>'+
+          '<span><span class="ver-chk">✓</span>Amount verified <span style="color:var(--text-dim);font-size:11px;">(this occurrence only — Apply to all won\'t copy it)</span></span>'+
         '</label>'+
         '<span class="m-lbl">Type</span>'+
         iconPickerHtml('eb-icon',billIconKey(b))+
@@ -1519,6 +1524,8 @@ function editBillRow(pid,bid){
         '<select class="m-input" id="eb-weekday">'+weekdayOptionsHtml(b.weekday==null?0:b.weekday)+'</select></div>'+
         '<span class="m-lbl">Link / URL (payment site, account page — optional)</span>'+
         '<input class="m-input" id="eb-url" type="url" value="'+esc(b.url||'')+'" placeholder="https://…">'+
+        '<span class="m-lbl">Payment method (optional — shows on the bill only when filled in)</span>'+
+        '<input class="m-input" id="eb-paymethod" value="'+esc(b.payMethod||'')+'" placeholder="e.g. Amex Blue, Checking, Venmo">'+
         '<span class="m-lbl">Repeats</span>'+
         '<select class="m-input" id="eb-recurrence" onchange="document.getElementById(\'eb-day-wrap\').style.display=this.value===\'weekly\'?\'none\':\'\';document.getElementById(\'eb-weekday-wrap\').style.display=this.value===\'weekly\'?\'\':\'none\';">'+
           '<option value="recurring"'+((b.recurrence||'recurring')==='recurring'?' selected':'')+'>🔁 Recurring — every period it\'s due</option>'+
@@ -1545,6 +1552,12 @@ function editBillRow(pid,bid){
     var el=document.getElementById('eb-amount');
     if(el){el.focus();el.select();}
   },50);
+}
+function toggleVerified(pid,bid){
+  const p=S.periods.find(pp=>pp.id===pid);const b=p?.bills.find(bb=>bb.id===bid);if(!b)return;
+  b.verified=!b.verified;
+  stampHistory(b,b.verified?'verified amount':'unverified amount');
+  persist();render();
 }
 function pullBillToPrev(pid,bid,ppid){
   const p=S.periods.find(pp=>pp.id===pid);
@@ -1582,6 +1595,9 @@ function saveEditBill(pid,bid){
   const ap=!!document.getElementById('eb-autopay')?.checked;
   b.autopay=ap;
   b.verified=!!document.getElementById('eb-verified')?.checked;
+  const pm=(document.getElementById('eb-paymethod')?.value||'').trim();
+  const pmChanged=(b.payMethod||'')!==pm;
+  b.payMethod=pm;
   const oldIcon=billIconKey(b);
   const ic=(document.getElementById('eb-icon')?.value)||'';
   const iconChanged=ic!==oldIcon;
@@ -1590,17 +1606,17 @@ function saveEditBill(pid,bid){
   if(ap&&b.status==='upcoming')b.status='pending'; // autopay bills auto-flip to Pending
   // If it's a recurring bill, offer to propagate changes forward
   if(b.templateId){
-    _pendingRipple={type:'template',pid:pid,tplId:b.templateId,n:n,av:av,day:b.day,weekday:b.weekday,rec:rec,u:u,ap:ap,ic:ic};
+    _pendingRipple={type:'template',pid:pid,tplId:b.templateId,n:n,av:av,day:b.day,weekday:b.weekday,rec:rec,u:u,ap:ap,ic:ic,pm:pm};
     showRippleChoice('<b style="color:var(--text);">'+esc(b.name)+'</b> is a recurring bill.<br>Apply these changes to all future periods, or just this one?');
     return;
-  } else if(urlChanged||iconChanged){
+  } else if(urlChanged||iconChanged||pmChanged){
     // Non-template bill: offer to ripple the URL / type icon forward to same-named bills in future periods
     const pi=S.periods.findIndex(pp=>pp.id===pid);
     let matches=0;
     S.periods.forEach((fp,fi)=>{if(fi>pi)fp.bills.forEach(bb=>{if(bb.name===oldName||bb.name===b.name)matches++;});});
     if(matches>0){
-      _pendingRipple={type:'name',pid:pid,oldName:oldName,newName:b.name,u:u,urlChanged:urlChanged,ic:ic,iconChanged:iconChanged};
-      showRippleChoice('Apply this '+(urlChanged&&iconChanged?'link and type':urlChanged?'link':'type')+' to '+matches+' future <b style="color:var(--text);">'+esc(b.name)+'</b> bill'+(matches>1?'s':'')+', or just this one?');
+      _pendingRipple={type:'name',pid:pid,oldName:oldName,newName:b.name,u:u,urlChanged:urlChanged,ic:ic,iconChanged:iconChanged,pm:pm,pmChanged:pmChanged};
+      showRippleChoice('Apply this '+[urlChanged?'link':'',iconChanged?'type':'',pmChanged?'payment method':''].filter(Boolean).join(' + ')+' to '+matches+' future <b style="color:var(--text);">'+esc(b.name)+'</b> bill'+(matches>1?'s':'')+', or just this one?');
       return;
     }
   }
@@ -1635,6 +1651,7 @@ function rippleApplyAll(){
         fp.bills.filter(bb=>bb.templateId===r.tplId).forEach(function(fb){
           if(r.n)fb.name=r.n;if(!isNaN(r.av)&&!fb.verified)fb.amount=r.av;
           if(r.ic!=null)fb.icon=r.ic;
+          if(r.pm!=null)fb.payMethod=r.pm;
           if(r.rec!=='weekly'&&r.day!==null)fb.day=r.day;
           if(r.weekday!=null)fb.weekday=r.weekday;
           if(r.rec)fb.recurrence=r.rec;
@@ -1649,6 +1666,7 @@ function rippleApplyAll(){
         if(r.n)S.templates[tplIdx].name=r.n;if(!isNaN(r.av))S.templates[tplIdx].amount=r.av;
         S.templates[tplIdx].url=r.u;S.templates[tplIdx].autopay=r.ap;
         if(r.ic!=null)S.templates[tplIdx].icon=r.ic;
+        if(r.pm!=null)S.templates[tplIdx].payMethod=r.pm;
         if(r.rec)S.templates[tplIdx].recurrence=r.rec;
         if(r.weekday!=null)S.templates[tplIdx].weekday=r.weekday;
         if(r.rec!=='weekly'&&r.day!==null)S.templates[tplIdx].day=r.day;
@@ -1656,7 +1674,7 @@ function rippleApplyAll(){
     } else if(r.type==='name'){
       S.periods.forEach((fp,fi)=>{
         if(fi<=pi)return;
-        fp.bills.forEach(bb=>{if(bb.name===r.oldName||bb.name===r.newName){if(r.urlChanged!==false)bb.url=r.u;if(r.iconChanged)bb.icon=r.ic;}});
+        fp.bills.forEach(bb=>{if(bb.name===r.oldName||bb.name===r.newName){if(r.urlChanged!==false)bb.url=r.u;if(r.iconChanged)bb.icon=r.ic;if(r.pmChanged)bb.payMethod=r.pm;}});
       });
     }
   }
@@ -2302,7 +2320,7 @@ function rebuildFuture(){
   S.periods.forEach((p,i)=>{
     if(i<=ai)return;
     const nb=buildBillsForPeriod(p);
-    const rebuilt=nb.map(b=>{const ex=p.bills.find(e=>e.templateId&&e.templateId===b.templateId);return ex?{...b,status:ex.status,url:ex.url||b.url,keepHere:ex.keepHere,icon:ex.icon!=null?ex.icon:b.icon,verified:ex.verified,amount:ex.verified?ex.amount:b.amount}:b;});
+    const rebuilt=nb.map(b=>{const ex=p.bills.find(e=>e.templateId&&e.templateId===b.templateId);return ex?{...b,status:ex.status,url:ex.url||b.url,keepHere:ex.keepHere,icon:ex.icon!=null?ex.icon:b.icon,payMethod:ex.payMethod||b.payMethod,verified:ex.verified,amount:ex.verified?ex.amount:b.amount}:b;});
     const oneOffs=p.bills.filter(e=>!e.templateId); // preserve one-offs untouched
     p.bills=rebuilt.concat(oneOffs).sort((a,c)=>(a.day||99)-(c.day||99));
   });
@@ -3384,7 +3402,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-BILLICONS";
+var HEATH_BUILD="2026-09-30-PAYVIA";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
