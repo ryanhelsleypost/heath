@@ -1014,6 +1014,66 @@ function renderTimeline() {
   wrap.innerHTML = '<div style="display:flex;width:100%;height:20px;gap:1px;overflow:hidden;">'+segsHtml+'</div>';
 }
 
+// ═══ PAYDOWN OPPORTUNITIES (build 2026-09-30-OPPS) ═══
+// Extra money you could throw at a card in a period WITHOUT any period — this one or any later one —
+// ending under the floor. Paying extra in period i lowers the end balance of i and every period after,
+// so the safe amount is the SMALLEST cushion (end − floor) from i onward. Allocated earliest-first:
+// taking period i's amount uses up that cushion for every later period too, so nothing double-counts.
+const OPP_FLOOR=500, OPP_MIN=100;
+function computeOpportunities(){
+  const bals=getRunningBals(); const ai=S.periods.findIndex(p=>p.active);
+  if(ai<0) return [];
+  const idx=[]; for(let i=ai;i<S.periods.length;i++){ if(bals[i]) idx.push(i); }
+  // suffix minimum of cushion, remembering which period sets it
+  const sufMin={}, sufAt={}; let m=Infinity, at=-1;
+  for(let k=idx.length-1;k>=0;k--){ const i=idx[k]; const c=bals[i].end-OPP_FLOOR; if(c<=m){m=c;at=i;} sufMin[i]=m; sufAt[i]=at; }
+  const out=[]; let used=0;
+  idx.forEach(function(i){
+    const amt=Math.floor(Math.max(0,sufMin[i]-used)/10)*10; // round down to $10
+    if(amt>=OPP_MIN){ out.push({i:i,p:S.periods[i],amount:amt,limitIdx:sufAt[i],end:bals[i].end}); used+=amt; }
+  });
+  return out;
+}
+function oppTargetCard(){
+  const cards=(DC.strategy==='snowball'?getSnowball():getAvalanche()).filter(c=>(c.balance||0)>0);
+  return cards[0]||null;
+}
+function oppLimitLabel(o){
+  if(o.limitIdx===o.i) return 'this period is the tightest ahead';
+  const lp=S.periods[o.limitIdx]; return lp?('limited by '+fmtDs(lp.startDate)+' – '+fmtDs(lp.endDate)):'';
+}
+function buildOppDropdown(opps){
+  if(!opps.length||_statDropdown!=='opp') return null;
+  const card=oppTargetCard();
+  const items=opps.map(function(o){
+    return '<div class="sd-item" data-pid="'+o.p.id+'" onclick="jumpToPeriod(event,this.dataset.pid)" onmouseover="sdHover(this,true)" onmouseout="sdHover(this,false)" style="display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 10px;cursor:pointer;border-radius:4px;">'+
+      '<span style="display:flex;flex-direction:column;gap:1px;min-width:0;">'+
+        '<span>'+fmtDs(o.p.startDate)+' – '+fmtDs(o.p.endDate)+'</span>'+
+        '<span style="font-size:11px;color:var(--text-dim);letter-spacing:.04em;">'+esc(oppLimitLabel(o))+'</span>'+
+      '</span>'+
+      '<span style="font-weight:700;font-size:17px;color:var(--green);white-space:nowrap;">+'+fmtD(o.amount)+'</span></div>';
+  }).join('');
+  const wrap=document.createElement('div');
+  wrap.addEventListener('click',function(e){e.stopPropagation();});
+  wrap.style.cssText='position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px;min-width:280px;max-width:calc(100vw - 16px);max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);';
+  wrap.innerHTML='<div style="font-size:11px;letter-spacing:.08em;color:var(--text-dim);padding:2px 4px 8px;line-height:1.5;">EXTRA YOU CAN PAY WITHOUT ANY PERIOD ENDING UNDER $'+OPP_FLOOR+
+    (card?'<br><span style="color:var(--green);letter-spacing:.02em;">→ target: '+esc(card.name)+(card.apr?' ('+card.apr+'% APR)':'')+'</span>':'')+
+    '<br>↓ click to jump · amounts update as you add payments</div>'+items;
+  requestAnimationFrame(function(){
+    var host=wrap.parentElement;if(!host)return;
+    var r=host.getBoundingClientRect();
+    wrap.style.top=(r.bottom+6)+'px';
+    wrap.style.left=Math.max(8,Math.min(r.left,window.innerWidth-wrap.offsetWidth-8))+'px';
+  });
+  return wrap;
+}
+function oppBannerHtml(p){
+  const o=computeOpportunities().find(x=>x.p.id===p.id); if(!o) return '';
+  const card=oppTargetCard();
+  return '<div style="margin:8px 12px 4px;padding:9px 12px;border:1px solid var(--green-dim);border-left:3px solid var(--green);border-radius:6px;background:rgba(34,84,61,.25);font-size:13px;color:var(--text-mid);line-height:1.5;">'+
+    '💡 <b style="color:var(--green);">Opportunity: up to '+fmtD(o.amount)+' extra</b>'+(card?' toward <b style="color:var(--text);">'+esc(card.name)+'</b>':' toward a card')+
+    '<div style="font-size:11px;color:var(--text-dim);">Keeps every period at or above $'+OPP_FLOOR+' · '+esc(oppLimitLabel(o))+'. Add it as a bill below and this updates.</div></div>';
+}
 function renderHeader() {
   const projEnd=activeEndBal();
   // Period Δ = whole-period plan: ALL income minus ALL bills for the active period,
@@ -1079,6 +1139,14 @@ function renderHeader() {
     if (tightDrop) tightStat.appendChild(tightDrop);
   }
   statsEl.appendChild(tightStat);
+  // Paydown opportunities
+  var opps = computeOpportunities();
+  var oppTotal = opps.reduce(function(s,o){return s+o.amount;},0);
+  var oppStat = makeStat('💡 OPPORTUNITY', opps.length ? (fmtD(oppTotal)+' ▾') : 'none yet', opps.length?'pos':'',
+    opps.length?function(ev){ev.stopPropagation();toggleStatDropdown('opp');}:null,
+    'Extra you could pay toward a card without any period ending under $'+OPP_FLOOR+' — click to see where');
+  if (opps.length) { var oppDrop = buildOppDropdown(opps); if (oppDrop) oppStat.appendChild(oppDrop); }
+  statsEl.appendChild(oppStat);
   // Misplaced bills audit
   var misplaced = findMisplacedBills();
   if (misplaced.length > 0) {
@@ -1148,6 +1216,7 @@ function secHdr(pid,key,label,lblStyle,sub){
 
 function renderPeriodBody(p,periodIdx,startBal) {
   let html='';
+  html+=oppBannerHtml(p);
   // Income section
   html+=secHdr(p.id,'income','Income','');
   html+='<div'+(isSecCollapsed(p.id,'income')?' style="display:none"':'')+'>';
@@ -3402,7 +3471,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-PAYVIA";
+var HEATH_BUILD="2026-09-30-OPPS";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
