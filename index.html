@@ -1143,9 +1143,9 @@ function renderHeader() {
   // Paydown opportunities
   var opps = computeOpportunities();
   var oppTotal = opps.reduce(function(s,o){return s+o.amount;},0);
-  var oppStat = makeStat('💡 OPPORTUNITY', opps.length ? (fmtD(oppTotal)+' ▾') : 'none yet', opps.length?'pos':'',
+  var oppStat = makeStat('💡 OPPORTUNITY', opps.length ? ('Next: '+fmtDs(opps[0].p.startDate)+' · +'+fmtD(opps[0].amount)+' ▾') : 'none yet', opps.length?'pos':'',
     opps.length?function(ev){ev.stopPropagation();toggleStatDropdown('opp');}:null,
-    'Extra you could pay toward a card without any period ending under $'+OPP_FLOOR+' — click to see where');
+    (opps.length?opps.length+' opportunit'+(opps.length!==1?'ies':'y')+' ahead. ':'')+'Extra you could pay toward a card without any period ending under $'+OPP_FLOOR+' — click to see them all');
   if (opps.length) { var oppDrop = buildOppDropdown(opps); if (oppDrop) oppStat.appendChild(oppDrop); }
   statsEl.appendChild(oppStat);
   // Misplaced bills audit
@@ -3472,7 +3472,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-OPPS750";
+var HEATH_BUILD="2026-09-30-OPPNEXT";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
