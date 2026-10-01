@@ -457,6 +457,8 @@ function pickIcon(inputId,btn){
   var g=document.getElementById(inputId+'-grid');
   if(g) g.querySelectorAll('.ico-opt').forEach(function(x){x.classList.toggle('sel',x===btn);});
 }
+const ACT_EYE_PH='<span class="act-btn" aria-hidden="true" style="font-size:11px;visibility:hidden;">\uD83D\uDC41</span>';
+const ACT_DEL_PH='<span class="act-btn del" aria-hidden="true" style="visibility:hidden;">🗑️</span>';
 const INCOME_ICON='<span class="bill-ico" title="Income">💵</span>';
 function periodBillsTotal(p) { return p.bills.reduce((s,b)=>s+(b.status==='cleared'?0:billEffAmt(b)),0) + periodPiggyTotal(p); }
 
@@ -1235,14 +1237,14 @@ function renderPeriodBody(p,periodIdx,startBal) {
       const hoursCtl = inc.type==='hourly' && !clr
         ? '<span style="font-size:11px;color:var(--text-dim);margin-left:8px;">'+(e.hours!=null&&e.hours>0?e.hours+'h':'')+'</span>'
         : '';
-      html+='<div class="bill-row"><div class="status-btn'+(clr?' cleared':'')+'" onclick="toggleEntryCleared(\''+p.id+'\','+ei+')" title="'+(clr?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(clr?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(clr?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(inc.name)+tierBadge+hoursCtl+'</div><div class="bill-amt in" style="'+(clr?'opacity:.35;':'')+'">'+(clr?'—':'+'+fmtD(res.value))+'</div><div class="bill-acts"><button class="act-btn" onclick="editIncomeEntry(\''+p.id+'\','+ei+')">✏️</button></div></div>';
+      html+='<div class="bill-row"><div class="status-btn'+(clr?' cleared':'')+'" onclick="toggleEntryCleared(\''+p.id+'\','+ei+')" title="'+(clr?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(clr?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(clr?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(inc.name)+tierBadge+hoursCtl+'</div><div class="bill-amt in" style="'+(clr?'opacity:.35;':'')+'">'+(clr?'—':'+'+fmtD(res.value))+'</div><div class="bill-acts">'+ACT_EYE_PH+'<button class="act-btn" onclick="editIncomeEntry(\''+p.id+'\','+ei+')">✏️</button>'+ACT_DEL_PH+'</div></div>';
     });
   } else {
-    html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts"><button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(pcCleared?' cleared':'')+'" onclick="toggleIncome(\''+p.id+'\')" title="'+(pcCleared?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(pcCleared?'✓':'·')+'</div><div class="bill-day"></div><div class="bill-name" style="'+(pcCleared?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(p.incomeName||'Paycheck')+'</div><div class="bill-amt in" style="'+(pcCleared?'opacity:.35;':'')+'">'+( pcCleared?'—':'+'+fmtD(p.income))+'</div><div class="bill-acts">'+ACT_EYE_PH+'<button class="act-btn" onclick="editPaycheck(\''+p.id+'\')">✏️</button>'+ACT_DEL_PH+'</div></div>';
   }
   (p.additionalIncome||[]).forEach(function(a,ai){
     const aCl=a.status==='cleared';
-    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
+    html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts">'+ACT_EYE_PH+'<button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
   });
   var showAddlForm = S.ui_addAddl === p.id;
   var addlFormHtml='';
@@ -3475,7 +3477,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-ADDBAR";
+var HEATH_BUILD="2026-09-30-ALIGN";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
