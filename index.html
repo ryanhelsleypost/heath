@@ -1245,13 +1245,9 @@ function renderPeriodBody(p,periodIdx,startBal) {
     html+='<div class="bill-row"><div class="status-btn'+(aCl?' cleared':'')+'" onclick="toggleAddlIncome(\''+p.id+'\','+ai+')" title="'+(aCl?'Already received — click to unmark':'Mark as received / already in balance')+'">'+(aCl?'✓':'·')+'</div><div class="bill-day">'+(a.recurrence==='recurring'&&a.day?a.day:'')+'</div><div class="bill-name" style="'+(aCl?'text-decoration:line-through;opacity:.45;':'')+'">'+INCOME_ICON+esc(a.name)+(a.recurrence==='recurring'?' <span title="Recurring income — repeats every period" style="font-size:11px;">🔁</span>':'')+'</div><div class="bill-amt in" style="'+(aCl?'opacity:.35;':'')+'">'+( aCl?'—':'+'+fmtD(a.amount))+'</div><div class="bill-acts"><button class="act-btn" onclick="editAddl(\''+p.id+'\','+ai+')">✏️</button><button class="act-btn del" onclick="delAddl(\''+p.id+'\','+ai+')">🗑️</button></div></div>';
   });
   var showAddlForm = S.ui_addAddl === p.id;
-  if (!showAddlForm) {
-    html += '<div class="bill-row" style="cursor:pointer;" onclick="S.ui_addAddl=\''+p.id+'\';render()">'+
-      '<div class="status-btn" style="border:none;color:var(--text-dim);font-size:16px;">＋</div>'+
-      '<div style="flex:1;font-size:13px;color:var(--text-dim);">Add additional income…</div>'+
-    '</div>';
-  } else {
-    html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
+  var addlFormHtml='';
+  if (showAddlForm) {
+    addlFormHtml += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
       '<div class="add-grid inc">'+
         '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">SOURCE</div>'+
           '<input class="add-input" id="ai-name-'+p.id+'" placeholder="e.g. Second Paycheck, Side Gig" style="width:100%;" onkeydown="aiKeydown(event,\''+p.id+'\',\'ai-amt-'+p.id+'\')"></div>'+
@@ -1284,20 +1280,61 @@ function renderPeriodBody(p,periodIdx,startBal) {
   });
 
   // Bills section
-  // ── Quick Spend bar (active period only) ──
-  if(p.active){
-    var qsOpen=S.ui_qsOpen||'';
-    html+='<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap;">'+
-      '<span style="font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">⚡ Quick spend</span>'+
+  // Add bill input
+  var showAddBForm = S.ui_addBill === p.id;
+  var billFormHtml='';
+  if (showAddBForm) {
+    billFormHtml += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
+      '<div class="add-grid bill">'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">NAME</div>'+
+          '<input class="add-input" id="ab-name-'+p.id+'" placeholder="e.g. Electric" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\',\'ab-amt-'+p.id+'\')"></div>'+
+        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
+          '<input class="add-input" id="ab-amt-'+p.id+'" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
+        '<div id="ab-day-wrap-'+p.id+'"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">DUE DAY</div>'+
+          '<input class="add-input" id="ab-day-'+p.id+'" type="number" min="1" max="31" placeholder="~" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
+        '<div id="ab-weekday-wrap-'+p.id+'" style="display:none;"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">WEEKDAY</div>'+
+          '<select class="add-input" id="ab-weekday-'+p.id+'" style="width:100%;">'+weekdayOptionsHtml(0)+'</select></div>'+
+        '<div style="display:flex;gap:6px;padding-bottom:1px;">'+
+          '<button class="btn primary sm" data-pid="'+p.id+'" onclick="saveAddBill(this.dataset.pid)">Add</button>'+
+          '<button class="btn sm" title="Cancel (Esc)" onclick="S.ui_addBill=null;render()">✕ Cancel</button>'+
+        '</div>'+
+      '</div>'+
+      '<div style="margin-top:8px;"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">LINK / URL (OPTIONAL)</div>'+
+        '<input class="add-input" id="ab-url-'+p.id+'" type="url" placeholder="https://…" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
+      '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;">'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+        '<input type="checkbox" id="ab-rec-'+p.id+'" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer;">'+
+        '<span>↻ Recurring <span style="color:var(--text-dim);font-size:11px;">(this + all future periods)</span></span>'+
+      '</label>'+
+      '<select class="add-input" id="ab-freq-'+p.id+'" style="width:auto;max-width:170px;" onchange="document.getElementById(\'ab-day-wrap-'+p.id+'\').style.display=this.value===\'weekly\'?\'none\':\'\';document.getElementById(\'ab-weekday-wrap-'+p.id+'\').style.display=this.value===\'weekly\'?\'\':\'none\';">'+
+        '<option value="monthly">Monthly (day of month)</option>'+
+        '<option value="weekly">Weekly (day of week)</option>'+
+      '</select>'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
+        '<input type="checkbox" id="ab-ap-'+p.id+'" style="accent-color:var(--amber);width:15px;height:15px;cursor:pointer;">'+
+        '<span>⚡ Autopay <span style="color:var(--text-dim);font-size:11px;">(starts as Pending)</span></span>'+
+      '</label>'+
+      '</div>'+
+    '</div>';
+  }
+  // ── Unified ADD bar: income, bill, and quick spends together (build 2026-09-30-ADDBAR) ──
+  var qsOpen=p.active?(S.ui_qsOpen||''):'';
+  html+='<div style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);flex-wrap:wrap;background:var(--surface);">'+
+    '<span style="font-size:10px;font-weight:700;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">＋ Add</span>'+
+    '<button class="btn sm" style="font-size:12px;'+(showAddlForm?'border-color:var(--green);color:var(--green);':'')+'" onclick="openAddIncome(\''+p.id+'\')">💵 Income</button>'+
+    '<button class="btn sm" style="font-size:12px;'+(showAddBForm?'border-color:var(--green);color:var(--green);':'')+'" onclick="'+(showAddBForm?'S.ui_addBill=null;render()':'showAddBillForm(\''+p.id+'\')')+'">🧾 Bill</button>'+
+    (p.active?
       [['groc','🛒 Groceries'],['gas','⛽ Gas'],['food','🍔 Food']].map(function(q){
         var active=qsOpen===q[0];
-        return '<button class="btn sm" style="font-size:12px;'+(active?'border-color:var(--green);color:var(--green);':'')+'" data-q="'+q[0]+'" onclick="S.ui_qsOpen=S.ui_qsOpen===this.dataset.q?\'\':this.dataset.q;render();if(S.ui_qsOpen)setTimeout(function(){var e=document.getElementById(\'qs-amt\');if(e)e.focus();},50)">'+q[1]+'</button>';
+        return '<button class="btn sm" style="font-size:12px;'+(active?'border-color:var(--green);color:var(--green);':'')+'" data-q="'+q[0]+'" onclick="S.ui_addAddl=null;S.ui_addBill=null;S.ui_qsOpen=S.ui_qsOpen===this.dataset.q?\'\':this.dataset.q;render();if(S.ui_qsOpen)setTimeout(function(){var e=document.getElementById(\'qs-amt\');if(e)e.focus();},50)">'+q[1]+'</button>';
       }).join('')+
+      '':'')+
+    (p.active?
       (qsOpen?'<span style="display:flex;align-items:center;gap:5px;"><span style="color:var(--text-dim);font-size:13px;">$</span>'+
         '<input id="qs-amt" type="number" inputmode="numeric" min="0" step="1" placeholder="0" style="width:75px;padding:6px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:inherit;font-size:14px;" onkeydown="if(event.key===\'Enter\')qsLog(\''+p.id+'\')">'+
         '<button class="btn sm primary" onclick="qsLog(\''+p.id+'\')">Log</button></span>':'')+
-    '</div>';
-  }
+      '':'')+
+  '</div>'+addlFormHtml+billFormHtml;
   html+=secHdr(p.id,'bills','Bills &amp; Expenses','');
   html+='<div'+(isSecCollapsed(p.id,'bills')?' style="display:none"':'')+'>';
   html+=piggyRows;
@@ -1338,47 +1375,6 @@ function renderPeriodBody(p,periodIdx,startBal) {
   if(vacation.length){html+=secHdr(p.id,'vacation','\u2708 TRIP / VACATION','font-size:10px;color:#1a5c1a;',true);if(!isSecCollapsed(p.id,'vacation'))vacation.forEach(b=>html+=billRow(b));}
   if(seasonal.length){html+=secHdr(p.id,'seasonal','SEASONAL / ANNUAL','font-size:10px;color:var(--blue-dim);',true);if(!isSecCollapsed(p.id,'seasonal'))seasonal.forEach(b=>html+=billRow(b));}
 
-  // Add bill input
-  var showAddBForm = S.ui_addBill === p.id;
-  if (!showAddBForm) {
-    html += '<div class="bill-row" style="cursor:pointer;" onclick="showAddBillForm(\''+p.id+'\')">' +
-      '<div class="status-btn" style="border:none;color:var(--text-dim);font-size:16px;">＋</div>'+
-      '<div style="flex:1;font-size:13px;color:var(--text-dim);">Add a bill or expense…</div>'+
-    '</div>';
-  } else {
-    html += '<div style="padding:10px 14px;border-top:1px solid var(--border);background:var(--surface2);">'+
-      '<div class="add-grid bill">'+
-        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">NAME</div>'+
-          '<input class="add-input" id="ab-name-'+p.id+'" placeholder="e.g. Electric" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\',\'ab-amt-'+p.id+'\')"></div>'+
-        '<div><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">AMOUNT ($)</div>'+
-          '<input class="add-input" id="ab-amt-'+p.id+'" type="number" min="0" step="0.01" placeholder="0.00" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
-        '<div id="ab-day-wrap-'+p.id+'"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">DUE DAY</div>'+
-          '<input class="add-input" id="ab-day-'+p.id+'" type="number" min="1" max="31" placeholder="~" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
-        '<div id="ab-weekday-wrap-'+p.id+'" style="display:none;"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">WEEKDAY</div>'+
-          '<select class="add-input" id="ab-weekday-'+p.id+'" style="width:100%;">'+weekdayOptionsHtml(0)+'</select></div>'+
-        '<div style="display:flex;gap:6px;padding-bottom:1px;">'+
-          '<button class="btn primary sm" data-pid="'+p.id+'" onclick="saveAddBill(this.dataset.pid)">Add</button>'+
-          '<button class="btn sm" title="Cancel (Esc)" onclick="S.ui_addBill=null;render()">✕ Cancel</button>'+
-        '</div>'+
-      '</div>'+
-      '<div style="margin-top:8px;"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">LINK / URL (OPTIONAL)</div>'+
-        '<input class="add-input" id="ab-url-'+p.id+'" type="url" placeholder="https://…" style="width:100%;" onkeydown="abKeydown(event,\''+p.id+'\')"></div>'+
-      '<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;">'+
-      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
-        '<input type="checkbox" id="ab-rec-'+p.id+'" style="accent-color:var(--green);width:15px;height:15px;cursor:pointer;">'+
-        '<span>↻ Recurring <span style="color:var(--text-dim);font-size:11px;">(this + all future periods)</span></span>'+
-      '</label>'+
-      '<select class="add-input" id="ab-freq-'+p.id+'" style="width:auto;max-width:170px;" onchange="document.getElementById(\'ab-day-wrap-'+p.id+'\').style.display=this.value===\'weekly\'?\'none\':\'\';document.getElementById(\'ab-weekday-wrap-'+p.id+'\').style.display=this.value===\'weekly\'?\'\':\'none\';">'+
-        '<option value="monthly">Monthly (day of month)</option>'+
-        '<option value="weekly">Weekly (day of week)</option>'+
-      '</select>'+
-      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-mid);">'+
-        '<input type="checkbox" id="ab-ap-'+p.id+'" style="accent-color:var(--amber);width:15px;height:15px;cursor:pointer;">'+
-        '<span>⚡ Autopay <span style="color:var(--text-dim);font-size:11px;">(starts as Pending)</span></span>'+
-      '</label>'+
-      '</div>'+
-    '</div>';
-  }
   html+='</div>'; // end Bills & Expenses section
 
   // Footer
@@ -1776,7 +1772,14 @@ function toggleAddlIncome(pid,idx){
   a.status=a.status==='cleared'?'upcoming':'cleared';
   persist();render();
 }
+function openAddIncome(pid){
+  S.ui_addBill=null; S.ui_qsOpen='';
+  S.ui_addAddl = S.ui_addAddl===pid ? null : pid;
+  render();
+  if(S.ui_addAddl) setTimeout(function(){ var el=document.getElementById('ai-name-'+pid); if(el)el.focus(); }, 50);
+}
 function showAddBillForm(pid) {
+  S.ui_addAddl = null; S.ui_qsOpen = '';
   S.ui_addBill = pid;
   render();
   setTimeout(function(){ var el=document.getElementById('ab-name-'+pid); if(el)el.focus(); }, 50);
@@ -3472,7 +3475,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-OPPNEXT";
+var HEATH_BUILD="2026-09-30-ADDBAR";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
