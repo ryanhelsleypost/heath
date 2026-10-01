@@ -1019,7 +1019,7 @@ function renderTimeline() {
 // ending under the floor. Paying extra in period i lowers the end balance of i and every period after,
 // so the safe amount is the SMALLEST cushion (end − floor) from i onward. Allocated earliest-first:
 // taking period i's amount uses up that cushion for every later period too, so nothing double-counts.
-const OPP_FLOOR=500, OPP_MIN=100;
+const OPP_FLOOR=750, OPP_MIN=100, OPP_SKIP_UNDER=1000; // skip periods already lit up by the <$500 / <$1K warnings
 function computeOpportunities(){
   const bals=getRunningBals(); const ai=S.periods.findIndex(p=>p.active);
   if(ai<0) return [];
@@ -1030,6 +1030,7 @@ function computeOpportunities(){
   const out=[]; let used=0;
   idx.forEach(function(i){
     const amt=Math.floor(Math.max(0,sufMin[i]-used)/10)*10; // round down to $10
+    if(bals[i].end<OPP_SKIP_UNDER) return;  // period itself is in a warning band — never suggest paying extra here
     if(amt>=OPP_MIN){ out.push({i:i,p:S.periods[i],amount:amt,limitIdx:sufAt[i],end:bals[i].end}); used+=amt; }
   });
   return out;
@@ -1056,7 +1057,7 @@ function buildOppDropdown(opps){
   const wrap=document.createElement('div');
   wrap.addEventListener('click',function(e){e.stopPropagation();});
   wrap.style.cssText='position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border2);border-radius:6px;padding:6px;min-width:280px;max-width:calc(100vw - 16px);max-height:60vh;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5);';
-  wrap.innerHTML='<div style="font-size:11px;letter-spacing:.08em;color:var(--text-dim);padding:2px 4px 8px;line-height:1.5;">EXTRA YOU CAN PAY WITHOUT ANY PERIOD ENDING UNDER $'+OPP_FLOOR+
+  wrap.innerHTML='<div style="font-size:11px;letter-spacing:.08em;color:var(--text-dim);padding:2px 4px 8px;line-height:1.5;">EXTRA YOU CAN PAY WITHOUT ANY PERIOD ENDING UNDER $'+OPP_FLOOR+' · SKIPS PERIODS ALREADY UNDER $1K'+
     (card?'<br><span style="color:var(--green);letter-spacing:.02em;">→ target: '+esc(card.name)+(card.apr?' ('+card.apr+'% APR)':'')+'</span>':'')+
     '<br>↓ click to jump · amounts update as you add payments</div>'+items;
   requestAnimationFrame(function(){
@@ -3471,7 +3472,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-OPPS";
+var HEATH_BUILD="2026-09-30-OPPS750";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
