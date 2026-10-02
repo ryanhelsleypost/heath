@@ -308,12 +308,23 @@ function buildStatDropdown(type, periodIdxs) {
   // Anchor below the host stat once in the DOM — fixed positioning escapes the
   // stats row's horizontal-scroll clipping on mobile.
   requestAnimationFrame(function(){
-    var host=wrap.parentElement;if(!host)return;
+    var host=wrap._host||wrap.parentElement;if(!host)return;
     var r=host.getBoundingClientRect();
     wrap.style.top=(r.bottom+6)+'px';
     wrap.style.left=Math.max(8,Math.min(r.left,window.innerWidth-wrap.offsetWidth-8))+'px';
   });
   return wrap;
+}
+// Dropdowns are mounted on <body>, not inside the stat: on iOS Safari a position:fixed child of the
+// horizontally-scrolling stats row gets clipped (invisible), so taps looked like they did nothing. (build 2026-10-02-DROPFIX)
+function clearStatPortal(){ ['stat-portal','stat-portal-bd'].forEach(function(id){var e=document.getElementById(id);if(e)e.remove();}); }
+function mountStatDropdown(host,wrap){
+  clearStatPortal();
+  var bd=document.createElement('div'); bd.id='stat-portal-bd';
+  bd.style.cssText='position:fixed;inset:0;z-index:499;background:transparent;cursor:pointer;';
+  bd.addEventListener('click',function(e){e.stopPropagation();_statDropdown=null;clearStatPortal();renderHeader();});
+  wrap.id='stat-portal'; wrap._host=host;
+  document.body.appendChild(bd); document.body.appendChild(wrap);
 }
 function toggleStatDropdown(type) {
   _statDropdown = _statDropdown === type ? null : type;
@@ -1063,7 +1074,7 @@ function buildOppDropdown(opps){
     (card?'<br><span style="color:var(--green);letter-spacing:.02em;">→ target: '+esc(card.name)+(card.apr?' ('+card.apr+'% APR)':'')+'</span>':'')+
     '<br>↓ click to jump · amounts update as you add payments</div>'+items;
   requestAnimationFrame(function(){
-    var host=wrap.parentElement;if(!host)return;
+    var host=wrap._host||wrap.parentElement;if(!host)return;
     var r=host.getBoundingClientRect();
     wrap.style.top=(r.bottom+6)+'px';
     wrap.style.left=Math.max(8,Math.min(r.left,window.innerWidth-wrap.offsetWidth-8))+'px';
@@ -1078,6 +1089,7 @@ function oppBannerHtml(p){
     '<div style="font-size:11px;color:var(--text-dim);">Keeps every period at or above $'+OPP_FLOOR+' · '+esc(oppLimitLabel(o))+'. Add it as a bill below and this updates.</div></div>';
 }
 function renderHeader() {
+  clearStatPortal();
   const projEnd=activeEndBal();
   // Period Δ = whole-period plan: ALL income minus ALL bills for the active period,
   // regardless of received/cleared status — so checking things off never moves it.
@@ -1125,21 +1137,21 @@ function renderHeader() {
   var negStat = makeStat('< $0', negCount+' period'+(negCount!==1?'s':'')+(negCount>0?' ▾':''), negCount>0?'neg':'pos', negCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('neg');}:null, 'Periods projected to end below $0 — click to see them');
   if (negCount>0) {
     var negDrop = buildStatDropdown('neg', negPeriods);
-    if (negDrop) negStat.appendChild(negDrop);
+    if (negDrop) mountStatDropdown(negStat,negDrop);
   }
   statsEl.appendChild(negStat);
   // Warning periods stat
   var warnStat = makeStat('< $500', warnCount+' period'+(warnCount!==1?'s':'')+(warnCount>0?' ▾':''), warnCount>0?'amber':'pos', warnCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('warn');}:null, 'Periods projected to end below $500 — click to see them');
   if (warnCount>0) {
     var warnDrop = buildStatDropdown('warn', warnPeriods);
-    if (warnDrop) warnStat.appendChild(warnDrop);
+    if (warnDrop) mountStatDropdown(warnStat,warnDrop);
   }
   statsEl.appendChild(warnStat);
   // Tight periods stat ($500–$999)
   var tightStat = makeStat('< $1K', tightCount+' period'+(tightCount!==1?'s':'')+(tightCount>0?' ▾':''), tightCount>0?'amber':'pos', tightCount>0?function(ev){ev.stopPropagation();toggleStatDropdown('tight');}:null, 'Periods projected to end below $1,000 — click to see them');
   if (tightCount>0) {
     var tightDrop = buildStatDropdown('tight', tightPeriods);
-    if (tightDrop) tightStat.appendChild(tightDrop);
+    if (tightDrop) mountStatDropdown(tightStat,tightDrop);
   }
   statsEl.appendChild(tightStat);
   // Paydown opportunities
@@ -1148,7 +1160,7 @@ function renderHeader() {
   var oppStat = makeStat('💡 OPPORTUNITY', opps.length ? ('Next: '+fmtDs(opps[0].p.startDate)+' · +'+fmtD(opps[0].amount)+' ▾') : 'none yet', opps.length?'pos':'',
     opps.length?function(ev){ev.stopPropagation();toggleStatDropdown('opp');}:null,
     (opps.length?opps.length+' opportunit'+(opps.length!==1?'ies':'y')+' ahead. ':'')+'Extra you could pay toward a card without any period ending under $'+OPP_FLOOR+' — click to see them all');
-  if (opps.length) { var oppDrop = buildOppDropdown(opps); if (oppDrop) oppStat.appendChild(oppDrop); }
+  if (opps.length) { var oppDrop = buildOppDropdown(opps); if (oppDrop) mountStatDropdown(oppStat,oppDrop); }
   statsEl.appendChild(oppStat);
   // Misplaced bills audit
   var misplaced = findMisplacedBills();
@@ -3477,7 +3489,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-09-30-ALIGN";
+var HEATH_BUILD="2026-10-02-DROPFIX";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
