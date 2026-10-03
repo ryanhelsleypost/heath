@@ -672,10 +672,14 @@ function xmasRecipientCard(r){
         mg.forEach(function(g){h+=xmasGiftRow(g);});
         h+=xmasAddGiftBtn(r.id,m.id,'Add a gift for '+esc(m.name)+'…');
       });
+      // No automatic "Whole family" section (build 2026-10-03-XMASNOWHOLE). Only shown if older gifts are already filed there,
+      // or if the group has no members yet, so nothing goes missing.
       var gg=xmasGiftsOf(r.id,null);
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 14px;background:var(--surface2);font-size:12px;"><span style="font-weight:700;">Whole '+esc(r.name)+'</span><span>'+xmasTotLine(xmasCostSum(gg),0)+'</span></div>';
-      gg.forEach(function(g){h+=xmasGiftRow(g);});
-      h+=xmasAddGiftBtn(r.id,null,'Add a gift for the whole group…');
+      if(gg.length||!(r.members||[]).length){
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 14px;background:var(--surface2);font-size:12px;"><span style="font-weight:700;">'+((r.members||[]).length?'Whole '+esc(r.name):esc(r.name))+'</span><span>'+xmasTotLine(xmasCostSum(gg),0)+'</span></div>';
+        gg.forEach(function(g){h+=xmasGiftRow(g);});
+        if(!(r.members||[]).length) h+=xmasAddGiftBtn(r.id,null);
+      }
     } else {
       all.forEach(function(g){h+=xmasGiftRow(g);});
       h+=xmasAddGiftBtn(r.id,null);
@@ -699,7 +703,8 @@ function xmasGiftModal(rid,mid,gid){
   var r=xmasR(rid); if(!r) return;
   var memSel='';
   if(r.kind==='group'){
-    memSel='<span class="m-lbl">For</span><select class="m-input" id="xg-mid"><option value="">Whole '+esc(r.name)+'</option>'+
+    var allowWhole=!(r.members||[]).length||(g&&!g.mid);
+    memSel='<span class="m-lbl">For</span><select class="m-input" id="xg-mid">'+(allowWhole?'<option value="">Whole '+esc(r.name)+'</option>':'')+
       (r.members||[]).map(function(m){return '<option value="'+m.id+'"'+(m.id===mid?' selected':'')+'>'+esc(m.name)+'</option>';}).join('')+'</select>';
   }
   document.getElementById('modal-root').innerHTML=
@@ -3853,7 +3858,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASROW";
+var HEATH_BUILD="2026-10-03-XMASNOWHOLE";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
