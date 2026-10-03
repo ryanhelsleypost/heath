@@ -777,9 +777,10 @@ function xmasRecipientModal(rid,kind){
       '<span class="m-lbl">'+(isG?'Group budget ($) — blank = sum of members':'Budget ($)')+xmasPotHint(rid)+'</span><input class="m-input" id="xr-budget" type="number" inputmode="decimal" min="0" step="1" value="'+(r.budget||'')+'">'+
       (!isG?'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:2px 0 10px;">'+
         '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-mid);cursor:pointer;"><input type="checkbox" id="xr-cookies" '+(r.cookies?'checked':'')+' style="width:15px;height:15px;accent-color:#d6a15b;"> 🍪 Getting cookies</label>'+
-        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-mid);">👤 How many people <input class="m-input" id="xr-people" type="number" inputmode="numeric" min="1" step="1" value="'+(rid?xmasHeads(r):'')+'" placeholder="1" style="width:60px;margin:0;"></label>'+
+        '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-mid);">🍪 Cookie count <input class="m-input" id="xr-people" type="number" inputmode="numeric" min="1" step="1" value="'+(rid?xmasHeads(r):'')+'" placeholder="1" style="width:64px;margin:0;"></label>'+
+        '<span style="flex-basis:100%;font-size:11px;color:var(--text-dim);margin-top:-4px;">How many people this covers — e.g. 2 for a couple, 10 for the office.</span>'+
       '</div>':'')+
-      (isG?'<span class="m-lbl">Members · budget · 👤 people · 🍪</span><div id="xr-members">'+mem+'</div>'+
+      (isG?'<span class="m-lbl">Members · budget · 🍪 count · 🍪</span><div id="xr-members">'+mem+'</div>'+
         '<button class="btn" style="font-size:12px;margin:2px 0 10px;" onclick="xmasAddMemberRow()">＋ Member</button>':'')+
       (rid?'<span class="m-lbl">Shopping date for all undated gifts (optional)</span><input class="m-input" id="xr-date" type="date">':'')+
       '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
@@ -794,7 +795,7 @@ function xmasMemberRowHtml(id,name,budget,cookies,people){
   return '<div class="xr-mem" data-id="'+(id||'')+'" style="display:flex;gap:6px;margin-bottom:6px;">'+
     '<input class="m-input xr-mn" style="flex:1;min-width:0;margin:0;" placeholder="Name" value="'+esc(name||'')+'">'+
     '<input class="m-input xr-mb" style="width:66px;flex:0 0 66px;margin:0;padding-left:8px;padding-right:4px;" type="number" inputmode="decimal" min="0" placeholder="$" value="'+(budget||'')+'">'+
-    '<input class="m-input xr-mp" style="width:44px;flex:0 0 44px;margin:0;padding-left:6px;padding-right:4px;" type="number" inputmode="numeric" min="1" title="How many people" placeholder="👤" value="'+(people&&people>1?people:'')+'">'+
+    '<input class="m-input xr-mp" style="width:44px;flex:0 0 44px;margin:0;padding-left:6px;padding-right:4px;" type="number" inputmode="numeric" min="1" title="Cookie count — how many people this covers" placeholder="1" value="'+(people&&people>1?people:'')+'">'+
     '<label title="Getting cookies" style="display:flex;align-items:center;gap:3px;font-size:14px;cursor:pointer;"><input type="checkbox" class="xr-mc" '+(cookies?'checked':'')+' style="width:15px;height:15px;accent-color:#d6a15b;">🍪</label>'+
     '<button class="act-btn del" onclick="this.parentElement.remove()">✕</button></div>';
 }
@@ -3898,7 +3899,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASHEADS";
+var HEATH_BUILD="2026-10-03-XMASCOUNT";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
