@@ -148,6 +148,12 @@ button.ver-chk.off:hover{border-color:#16a34a;color:#16a34a;}
 .xck-slot{display:inline-flex;align-items:center;justify-content:flex-end;gap:1px;width:58px;flex:0 0 58px;}
 @media(max-width:520px){.xr-mem{flex-wrap:wrap;align-items:center;}.xr-mem .xr-mn{flex:1 1 100%!important;}.xgf-slot{width:36px!important;flex-basis:36px!important;}.xck-slot{width:46px!important;flex-basis:46px!important;}.xck-pen{width:28px!important;flex-basis:28px!important;}.xr-row{gap:6px!important;padding-left:8px!important;padding-right:6px!important;}.xr-ico{width:18px;}.xgf-n{display:none;}}
 .xr-ico{display:inline-block;width:20px;text-align:center;flex-shrink:0;}
+.x-done{position:absolute;right:-3px;bottom:-1px;width:13px;height:13px;border-radius:50%;background:#16a34a;color:#fff;font-size:9px;font-weight:800;line-height:13px;text-align:center;box-shadow:0 0 0 1.5px var(--bg2);}
+.xr-card+.xr-card{border-top:1px solid var(--border);}
+.xr-handle{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--text-dim);font-size:15px;line-height:1;padding:6px 2px 6px 0;margin-left:-2px;opacity:.55;}
+.xr-handle:hover{opacity:1;}
+.xr-card.xr-dragging{opacity:.85;background:var(--surface2);box-shadow:0 6px 18px rgba(0,0,0,.45);position:relative;z-index:5;}
+.xr-card.xr-dragging .xr-handle{cursor:grabbing;opacity:1;}
 .xgf-slot{display:inline-flex;align-items:center;justify-content:flex-end;gap:1px;width:46px;flex:0 0 46px;}
 .xck-pen{display:inline-block;width:34px;flex:0 0 34px;text-align:center;}
 .bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
@@ -625,8 +631,8 @@ function renderXmas(){
     (pot?'':xmasOverallHtml(budget))+
     '<div style="display:flex;gap:10px 14px;flex-wrap:wrap;">'+row+'</div>'+bar+
     '<div style="display:flex;gap:6px 16px;flex-wrap:wrap;font-size:13px;font-weight:700;margin-bottom:4px;">'+
-      '<span style="color:var(--green);">🎁 '+xmasGiftCount()+' getting gifts</span>'+
-      (xmasCookieCount()?'<span style="color:#d6a15b;">🍪 '+xmasCookieCount()+' '+(xmasCookieCount()===1?'person':'people')+' getting cookies</span><span style="color:#d6a15b;">📦 '+xmasBoxCount()+' box'+(xmasBoxCount()!==1?'es':'')+'</span>':'')+
+      '<span style="color:var(--green);">🎁 '+xmasGiftCount()+' getting gifts <span style="font-weight:500;color:var(--text-dim);">('+xmasGiftsDone()+' done)</span></span>'+
+      (xmasCookieCount()?'<span style="color:#d6a15b;">🍪 '+xmasCookieCount()+' '+(xmasCookieCount()===1?'person':'people')+' getting cookies</span><span style="color:#d6a15b;">📦 '+xmasBoxCount()+' box'+(xmasBoxCount()!==1?'es':'')+' <span style="font-weight:500;color:var(--text-dim);">('+xmasBoxesDone()+' made)</span></span>':'')+
     '</div>'+
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
@@ -636,10 +642,11 @@ function renderXmas(){
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 6px;font-size:11px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">'+
     '<span>'+X.recipients.length+' on the list'+' · <span style="color:var(--green);">🎁 '+xmasGiftCount()+'</span>'+(xmasCookieCount()?' · <span style="color:#d6a15b;">🍪 '+xmasCookieCount()+' · 📦 '+xmasBoxCount()+'</span>':'')+'</span>'+
     '<button class="btn" style="font-size:11px;padding:3px 9px;" onclick="xmasSetAllOpen('+(anyOpen?'false':'true')+')">'+(anyOpen?'▴ Collapse all':'▾ Expand all')+'</button></div>';
-  h+='<div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg2);margin-bottom:12px;">'+
+  h+='<div id="xr-list" style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg2);margin-bottom:12px;">'+
     X.recipients.map(function(r,i){return xmasRecipientCard(r,i===X.recipients.length-1);}).join('')+'</div>';
   h+='<div style="margin:18px 0 6px;display:flex;justify-content:flex-end;"><button class="btn" style="font-size:12px;" onclick="xmasNewYear()">🗓 Start '+(X.year+1)+' list</button></div>';
   root.innerHTML=h+xmasArchiveHtml();
+  xmasDragInit();
 }
 function xmasHeathHtml(){
   var rows=S.periods.map(function(p){return {p:p,a:xmasPeriodAmt(p)};}).filter(function(x){return x.a>0;});
@@ -677,8 +684,9 @@ function xmasRecipientCard(r,last){
   if(r.kind==='group') meta.push((r.members||[]).length+' member'+((r.members||[]).length!==1?'s':''));
   if(bought) meta.push('✓'+bought+' bought');
   if(r.kind!=='group'&&!xmasGetsGift(r)) meta[0]=r.cookies?'cookies only':'no gift';
-  var h='<div style="border-left:3px solid '+accent+';'+(last?'':'border-bottom:1px solid var(--border);')+'">'+
+  var h='<div class="xr-card" data-r="'+r.id+'" style="border-left:3px solid '+accent+';">'+
     '<div class="xr-row" style="display:flex;align-items:center;gap:9px;padding:8px 10px 8px 11px;cursor:pointer;" data-r="'+r.id+'" onclick="xmasToggleOpen(this.dataset.r)">'+
+      '<span class="xr-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>'+
       '<span style="font-size:10px;color:var(--text-dim);width:9px;">'+(open?'▾':'▸')+'</span>'+
       '<span class="xr-ico" style="font-size:15px;line-height:1;">'+(r.kind==='group'?'👥':'')+'</span>'+
       '<div style="flex:1;min-width:0;">'+
@@ -690,9 +698,9 @@ function xmasRecipientCard(r,last){
       '</div>'+
       '<div style="font-size:13px;white-space:nowrap;">'+xmasTotLine(cost,budget)+'</div>'+
       (r.kind==='group'?(function(){var gg=(r.members||[]).filter(function(m){return xmasGetsGift(m);}).length;
-         return '<span class="xgf-slot" title="Members getting gifts">'+(gg?'<span class="xgf-n" style="font-size:10.5px;color:var(--green);">×'+gg+'</span>':'')+'<button class="act-btn" tabindex="-1" onclick="event.stopPropagation()" style="font-size:14px;padding:3px 4px;cursor:default;'+(gg?'':'opacity:.12;filter:grayscale(1);')+'">🎁</button></span>';})():xmasGiftBtn(xmasGetsGift(r),r.id,null))+
+         return '<span class="xgf-slot" title="Members getting gifts">'+(gg?'<span class="xgf-n" style="font-size:10.5px;color:var(--green);">×'+gg+'</span>':'')+'<button class="act-btn" tabindex="-1" onclick="event.stopPropagation()" style="font-size:14px;padding:3px 4px;position:relative;cursor:default;'+(gg?'':'opacity:.12;filter:grayscale(1);')+'">🎁'+xmasDoneMark(gg&&(r.members||[]).filter(function(m){return xmasGetsGift(m);}).every(function(m){return m.giftDone;}))+'</button></span>';})():xmasGiftBtn(xmasGetsGift(r),r.id,null))+
       (r.kind==='group'?(function(){var gc=(r.members||[]).reduce(function(n,m){return n+(m.cookies?xmasHeads(m):0);},0);
-         return '<span class="xck-slot" title="Cookies for this group\'s members — set them per member">'+(gc?'<span style="font-size:10.5px;color:#d6a15b;">×'+gc+'</span>':'')+'<button class="act-btn" tabindex="-1" onclick="event.stopPropagation()" style="font-size:14px;padding:3px 4px;cursor:default;'+(gc?'':'opacity:.12;filter:grayscale(1);')+'">🍪</button>'+'</span>';})():xmasCookieBtn(!!r.cookies,r.id,null))+
+         return '<span class="xck-slot" title="Cookies for this group\'s members — set them per member">'+(gc?'<span style="font-size:10.5px;color:#d6a15b;">×'+gc+'</span>':'')+'<button class="act-btn" tabindex="-1" onclick="event.stopPropagation()" style="font-size:14px;padding:3px 4px;position:relative;cursor:default;'+(gc?'':'opacity:.12;filter:grayscale(1);')+'">🍪'+xmasDoneMark(gc&&(r.members||[]).filter(function(m){return m.cookies;}).every(function(m){return m.cookiesDone;}))+'</button>'+'</span>';})():xmasCookieBtn(!!r.cookies,r.id,null))+
       '<button class="act-btn xck-pen" style="font-size:13px;padding:4px 6px;" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
     '</div>';
   if(open){
@@ -726,12 +734,24 @@ function xmasEntries(){ var out=[]; ensureXmas().recipients.forEach(function(r){
 function xmasGiftCount(){ return xmasEntries().filter(function(e){return xmasGetsGift(e.x);}).length; }
 // one box per entry on the list: a person with cookies, or a group where any member gets cookies
 function xmasBoxCount(){ return ensureXmas().recipients.filter(function(r){ return r.kind==='group'?(r.members||[]).some(function(m){return m.cookies;}):!!r.cookies; }).length; }
+// ── 3-step status per entry: off → to do → ✓ done (build 2026-10-03-XMASDONE) ──
+function xmasDoneMark(done){ return done?'<span class="x-done">✓</span>':''; }
+function xmasBtnStyle(on){ return 'font-size:14px;padding:3px 4px;position:relative;'+(on?'':'opacity:.22;filter:grayscale(1);'); }
+function xmasFind(rid,mid){ var r=xmasR(rid); if(!r) return null; return mid?(r.members||[]).find(function(m){return m.id===mid;}):r; }
+function xmasGiftsDone(){ return xmasEntries().filter(function(e){return xmasGetsGift(e.x)&&e.x.giftDone;}).length; }
+function xmasBoxesDone(){ return ensureXmas().recipients.filter(function(r){
+  if(r.kind==='group'){ var c=(r.members||[]).filter(function(m){return m.cookies;}); return c.length&&c.every(function(m){return m.cookiesDone;}); }
+  return r.cookies&&r.cookiesDone; }).length; }
 function xmasGiftBtn(on,rid,mid){
-  return '<span class="xgf-slot"><button class="act-btn" title="'+(on?'Getting a gift — tap for cookies/no gift':'No gift — tap to add back to the gift list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleGift(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 4px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🎁</button></span>';
+  var x=xmasFind(rid,mid), done=on&&x&&x.giftDone;
+  return '<span class="xgf-slot"><button class="act-btn" title="'+(!on?'No gift — tap to add':done?'Gift bought ✓ — tap to remove from the gift list':'Gift still to buy — tap when bought')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleGift(this.dataset.r,this.dataset.m||null)" style="'+xmasBtnStyle(on)+'">🎁'+xmasDoneMark(done)+'</button></span>';
 }
 function xmasToggleGift(rid,mid){
   var r=xmasR(rid); if(!r) return; var x=mid?(r.members||[]).find(function(m){return m.id===mid;}):r; if(!x) return;
-  x.gift=xmasGetsGift(x)?false:true; persist(); renderXmas();
+  if(!xmasGetsGift(x)){ x.gift=true; x.giftDone=false; }        // off → to buy
+  else if(!x.giftDone){ x.giftDone=true; }                      // to buy → bought
+  else { x.gift=false; x.giftDone=false; }                      // bought → off
+  persist(); renderXmas();
 }
 // ── 🍪 Cookie supplies: a plain list of item · qty · cost each (build 2026-10-03-XMASSUP) ──
 function xmasSupplies(){ var X=ensureXmas(); X.supplies=X.supplies||[]; return X.supplies; }
@@ -778,13 +798,48 @@ function xmasSupDel(id){ var X=ensureXmas(); X.supplies=xmasSupplies().filter(fu
 function xmasCookieCount(){ var n=0; ensureXmas().recipients.forEach(function(r){ if(r.kind==='group') (r.members||[]).forEach(function(m){ if(m.cookies) n+=xmasHeads(m); }); else if(r.cookies) n+=xmasHeads(r); }); return n; }
 function xmasCookieBtn(on,rid,mid){
   var r=xmasR(rid), x=mid?((r&&r.members)||[]).find(function(m){return m.id===mid;}):r, k=xmasHeads(x);
-  return '<span class="xck-slot">'+(k>1?'<span style="font-size:10.5px;color:'+(on?'#d6a15b':'var(--text-dim)')+';" title="'+k+' people">×'+k+'</span>':'')+'<button class="act-btn" title="'+(on?'Getting cookies — tap to remove':'Tap to add to the cookie list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleCookie(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 4px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🍪</button></span>';
+  return '<span class="xck-slot">'+(k>1?'<span style="font-size:10.5px;color:'+(on?'#d6a15b':'var(--text-dim)')+';" title="'+k+' people">×'+k+'</span>':'')+'<button class="act-btn" title="'+(!on?'No cookies — tap to add':(x&&x.cookiesDone)?'Cookies made ✓ — tap to remove':'Cookies still to make — tap when made')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleCookie(this.dataset.r,this.dataset.m||null)" style="'+xmasBtnStyle(on)+'">🍪'+xmasDoneMark(on&&x&&x.cookiesDone)+'</button></span>';
 }
 function xmasToggleCookie(rid,mid){
   var r=xmasR(rid); if(!r) return;
-  if(mid){ var m=(r.members||[]).find(function(x){return x.id===mid;}); if(m) m.cookies=!m.cookies; }
-  else r.cookies=!r.cookies;
+  var x=mid?(r.members||[]).find(function(m){return m.id===mid;}):r; if(!x) return;
+  if(!x.cookies){ x.cookies=true; x.cookiesDone=false; }       // off → to make
+  else if(!x.cookiesDone){ x.cookiesDone=true; }                // to make → made
+  else { x.cookies=false; x.cookiesDone=false; }                // made → off
   persist(); renderXmas();
+}
+// ── drag to reorder (build 2026-10-03-XMASDRAG) ──
+function xmasDragInit(){
+  var list=document.getElementById('xr-list'); if(!list) return;
+  list.querySelectorAll('.xr-handle').forEach(function(h){ h.addEventListener('pointerdown',xmasDragStart); });
+}
+function xmasDragStart(e){
+  if(e.button!==undefined&&e.button>0) return;
+  e.preventDefault(); e.stopPropagation();
+  var h=e.currentTarget, card=h.closest('.xr-card'), list=document.getElementById('xr-list'); if(!card||!list) return;
+  card.classList.add('xr-dragging');
+  var scrollTimer=null, lastY=e.clientY;
+  function place(y){
+    var sibs=Array.prototype.filter.call(list.children,function(c){return c!==card&&c.classList.contains('xr-card');});
+    var before=null;
+    for(var i=0;i<sibs.length;i++){ var r=sibs[i].getBoundingClientRect(); if(y<r.top+r.height/2){ before=sibs[i]; break; } }
+    if(before!==card.nextSibling||!before) list.insertBefore(card,before);
+  }
+  function autoscroll(){ var y=lastY, m=70, v=0; if(y<m) v=-Math.ceil((m-y)/6); else if(y>window.innerHeight-m) v=Math.ceil((y-(window.innerHeight-m))/6); if(v){ window.scrollBy(0,v); place(y); } }
+  var pid=e.pointerId;
+  function move(ev){ if(ev.pointerId!==pid) return; ev.preventDefault(); lastY=ev.clientY; place(ev.clientY); }
+  function up(ev){
+    if(ev&&ev.pointerId!==pid) return;
+    window.removeEventListener('pointermove',move,{passive:false}); window.removeEventListener('pointerup',up); window.removeEventListener('pointercancel',up);
+    clearInterval(scrollTimer); card.classList.remove('xr-dragging');
+    var order=Array.prototype.map.call(list.querySelectorAll('.xr-card'),function(c){return c.dataset.r;});
+    var X=ensureXmas(), before=X.recipients.map(function(r){return r.id;}).join(',');
+    X.recipients.sort(function(a,b){return order.indexOf(a.id)-order.indexOf(b.id);});
+    if(before!==X.recipients.map(function(r){return r.id;}).join(',')) persist();
+    renderXmas();
+  }
+  window.addEventListener('pointermove',move,{passive:false}); window.addEventListener('pointerup',up); window.addEventListener('pointercancel',up);
+  scrollTimer=setInterval(autoscroll,30);
 }
 function xmasSetAllOpen(v){ ensureXmas().recipients.forEach(function(r){r.open=v;}); persist(); renderXmas(); }
 function xmasArchiveHtml(){
@@ -884,7 +939,8 @@ function xmasSaveRecipient(rid,kind){
     var keep=[];
     document.querySelectorAll('#xr-members .xr-mem').forEach(function(row){
       var nm=(row.querySelector('.xr-mn').value||'').trim(); if(!nm) return;
-      keep.push({id:row.dataset.id||uid(),name:nm,budget:parseFloat(row.querySelector('.xr-mb').value)||0,cookies:!!(row.querySelector('.xr-mc')||{}).checked,gift:!!(row.querySelector('.xr-mg')||{checked:true}).checked,people:(parseInt((row.querySelector('.xr-mp')||{}).value,10)>0?parseInt(row.querySelector('.xr-mp').value,10):null)});
+      var _old=(r.members||[]).find(function(m){return m.id===row.dataset.id;})||{};
+      keep.push({giftDone:!!_old.giftDone,cookiesDone:!!_old.cookiesDone,id:row.dataset.id||uid(),name:nm,budget:parseFloat(row.querySelector('.xr-mb').value)||0,cookies:!!(row.querySelector('.xr-mc')||{}).checked,gift:!!(row.querySelector('.xr-mg')||{checked:true}).checked,people:(parseInt((row.querySelector('.xr-mp')||{}).value,10)>0?parseInt(row.querySelector('.xr-mp').value,10):null)});
     });
     var ids=keep.map(function(m){return m.id;});
     X.gifts.forEach(function(g){ if(g.rid===r.id&&g.mid&&ids.indexOf(g.mid)<0) g.mid=null; }); // removed member → gift moves to whole group
@@ -3970,7 +4026,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASBOX";
+var HEATH_BUILD="2026-10-03-XMASDONE";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
