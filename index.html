@@ -631,6 +631,7 @@ function renderXmas(){
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
   '</div>';
+  h+=xmasSuppliesHtml();
   var anyOpen=X.recipients.some(function(r){return r.open===true;});
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 6px;font-size:11px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">'+
     '<span>'+X.recipients.length+' on the list'+' · <span style="color:var(--green);">🎁 '+xmasGiftCount()+'</span>'+(xmasCookieCount()?' · <span style="color:#d6a15b;">🍪 '+xmasCookieCount()+' · 📦 '+xmasBoxCount()+'</span>':'')+'</span>'+
@@ -731,6 +732,48 @@ function xmasToggleGift(rid,mid){
   var r=xmasR(rid); if(!r) return; var x=mid?(r.members||[]).find(function(m){return m.id===mid;}):r; if(!x) return;
   x.gift=xmasGetsGift(x)?false:true; persist(); renderXmas();
 }
+// ── 🍪 Cookie supplies: a plain list of item · qty · cost each (build 2026-10-03-XMASSUP) ──
+function xmasSupplies(){ var X=ensureXmas(); X.supplies=X.supplies||[]; return X.supplies; }
+function xmasSupLine(it){ return Math.round((Number(it.qty)||0)*(Number(it.cost)||0)*100)/100; }
+function xmasSupTotal(){ return Math.round(xmasSupplies().reduce(function(s,it){return s+xmasSupLine(it);},0)*100)/100; }
+function xmasMoney(n){ n=Number(n)||0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2}); }
+function xmasSuppliesHtml(){
+  var X=ensureXmas(), list=xmasSupplies(), open=X.supOpen===true, tot=xmasSupTotal();
+  var h='<div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg2);margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;" onclick="xmasSupToggle()">'+
+      '<span style="font-size:10px;color:var(--text-dim);width:9px;">'+(open?'▾':'▸')+'</span>'+
+      '<span style="font-size:15px;">🍪</span>'+
+      '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">Cookie supplies</div>'+
+        '<div style="font-size:10.5px;color:var(--text-dim);">'+(list.length?list.length+' item'+(list.length!==1?'s':''):'add flour, butter, sugar…')+'</div></div>'+
+      '<div style="font-size:14px;font-weight:700;color:#d6a15b;">'+xmasMoney(tot)+'</div>'+
+    '</div>';
+  if(open){
+    h+='<div style="border-top:1px solid var(--border);padding:6px 10px 10px;">'+
+      '<div style="display:flex;gap:6px;font-size:10px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;padding:4px 0;">'+
+        '<span style="flex:1;">Item</span><span style="width:52px;">Qty</span><span style="width:70px;">$ each</span><span style="width:64px;text-align:right;">Total</span><span style="width:26px;"></span></div>'+
+      list.map(function(it){
+        var inp='background:var(--surface2);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:13px;padding:5px 6px;';
+        return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;">'+
+          '<input style="flex:1;min-width:0;'+inp+'" value="'+esc(it.name||'')+'" placeholder="Item" data-i="'+it.id+'" onchange="xmasSupSet(this.dataset.i,\'name\',this.value)">'+
+          '<input style="width:52px;'+inp+'" type="number" inputmode="decimal" min="0" step="any" value="'+(it.qty==null?'':it.qty)+'" placeholder="1" data-i="'+it.id+'" onchange="xmasSupSet(this.dataset.i,\'qty\',this.value)">'+
+          '<input style="width:70px;'+inp+'" type="number" inputmode="decimal" min="0" step="0.01" value="'+(it.cost==null?'':it.cost)+'" placeholder="0.00" data-i="'+it.id+'" onchange="xmasSupSet(this.dataset.i,\'cost\',this.value)">'+
+          '<span style="width:64px;text-align:right;font-size:13px;">'+xmasMoney(xmasSupLine(it))+'</span>'+
+          '<button class="act-btn del" style="width:26px;padding:3px;" data-i="'+it.id+'" onclick="xmasSupDel(this.dataset.i)">✕</button></div>';
+      }).join('')+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">'+
+        '<button class="btn" style="font-size:12px;" onclick="xmasSupAdd()">＋ Item</button>'+
+        '<span style="font-size:13px;color:var(--text-dim);">Total <b style="color:#d6a15b;font-size:15px;">'+xmasMoney(tot)+'</b></span></div>'+
+    '</div>';
+  }
+  return h+'</div>';
+}
+function xmasSupToggle(){ var X=ensureXmas(); X.supOpen=X.supOpen!==true; persist(); renderXmas(); }
+function xmasSupAdd(){ var X=ensureXmas(); xmasSupplies().push({id:uid(),name:'',qty:1,cost:null}); X.supOpen=true; persist(); renderXmas();
+  setTimeout(function(){ var ins=document.querySelectorAll('#tab-xmas input[placeholder="Item"]'); if(ins.length) ins[ins.length-1].focus(); },30); }
+function xmasSupSet(id,k,v){ var it=xmasSupplies().find(function(x){return x.id===id;}); if(!it) return;
+  if(k==='name') it.name=v.trim(); else { var n=parseFloat(v); it[k]=isNaN(n)?null:n; }
+  persist(); renderXmas(); }
+function xmasSupDel(id){ var X=ensureXmas(); X.supplies=xmasSupplies().filter(function(x){return x.id!==id;}); persist(); renderXmas(); }
 function xmasCookieCount(){ var n=0; ensureXmas().recipients.forEach(function(r){ if(r.kind==='group') (r.members||[]).forEach(function(m){ if(m.cookies) n+=xmasHeads(m); }); else if(r.cookies) n+=xmasHeads(r); }); return n; }
 function xmasCookieBtn(on,rid,mid){
   var r=xmasR(rid), x=mid?((r&&r.members)||[]).find(function(m){return m.id===mid;}):r, k=xmasHeads(x);
@@ -3926,7 +3969,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASGIFTFLAG";
+var HEATH_BUILD="2026-10-03-XMASSUP";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
