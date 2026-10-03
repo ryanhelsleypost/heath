@@ -593,15 +593,32 @@ function renderXmas(){
     h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+xmasOverallHtml(0)+'</div>';
     root.innerHTML=h+xmasArchiveHtml(); return;
   }
-  // summary
+  // summary — one row when an overall budget is set (build 2026-10-03-XMASROW)
+  var stat=function(lbl,val,col,click){return '<div style="flex:1;min-width:92px;'+(click?'cursor:pointer;':'')+'"'+(click?' onclick="'+click+'" title="Tap to change"':'')+'><div class="stat-lbl" style="white-space:nowrap;">'+lbl+'</div><div style="font-size:21px;font-weight:700;white-space:nowrap;color:'+(col||'var(--text)')+';">'+val+'</div></div>';};
+  var row, bar;
+  if(pot){
+    var un=pot-budget;
+    row=stat('Overall ✏️',fmtD(pot),'','xmasOverallModal()')+
+        stat('Given to people',fmtD(budget))+
+        stat(un>=0?'Unassigned':'Over-assigned',fmtD(un),un>=0?'var(--blue,#60a5fa)':'var(--red)')+
+        stat('Total cost',fmtD(cost),cost>pot?'var(--red)':'')+
+        stat(left>=0?'Left of overall':'Over overall',fmtD(left),left>=0?'var(--green)':'var(--red)');
+    // one bar: spent (green) inside given-to-people (blue) inside the overall pot
+    var aPct=Math.min(100,Math.round(budget/pot*100)), cPct=Math.min(100,Math.round(cost/pot*100));
+    bar='<div style="position:relative;background:var(--border);border-radius:6px;height:8px;overflow:hidden;margin:10px 0 6px;">'+
+      '<div style="position:absolute;left:0;top:0;height:8px;width:'+aPct+'%;background:'+(un>=0?'rgba(96,165,250,.45)':'rgba(248,113,113,.55)')+';"></div>'+
+      '<div style="position:absolute;left:0;top:0;height:8px;width:'+cPct+'%;background:'+(cost>pot?'var(--red)':'var(--green)')+';"></div></div>'+
+      '<div style="display:flex;gap:12px;font-size:11px;color:var(--text-dim);margin-bottom:4px;"><span><span style="color:var(--green);">■</span> spent</span><span><span style="color:#60a5fa;">■</span> given to people</span></div>'+
+      (un<0?'<div style="font-size:12px;color:var(--red);margin-bottom:4px;">People\'s budgets add up to '+fmtD(-un)+' more than your overall budget.</div>':'');
+  } else {
+    row=stat('Total cost',fmtD(cost),cost>budget&&budget>0?'var(--red)':'')+
+        stat('Total budget',fmtD(budget))+
+        stat(left>=0?'Left':'Over',fmtD(left),left>=0?'var(--green)':'var(--red)');
+    bar='<div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden;margin:10px 0 6px;"><div style="height:8px;width:'+pct+'%;background:'+(cost>base&&base>0?'var(--red)':'var(--green)')+';"></div></div>';
+  }
   h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+
-    xmasOverallHtml(budget)+
-    '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
-      '<div><div class="stat-lbl">Total cost</div><div style="font-size:22px;font-weight:700;color:'+(cost>base&&base>0?'var(--red)':'var(--text)')+';">'+fmtD(cost)+'</div></div>'+
-      (pot?'':'<div><div class="stat-lbl">Total budget</div><div style="font-size:22px;font-weight:700;">'+fmtD(budget)+'</div></div>')+
-      '<div><div class="stat-lbl">'+(left>=0?'Left'+(pot?' of overall':''):'Over'+(pot?' overall':''))+'</div><div style="font-size:22px;font-weight:700;color:'+(left>=0?'var(--green)':'var(--red)')+';">'+fmtD(left)+'</div></div>'+
-    '</div>'+
-    '<div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden;margin:10px 0 6px;"><div style="height:8px;width:'+pct+'%;background:'+(cost>base&&base>0?'var(--red)':'var(--green)')+';"></div></div>'+
+    (pot?'':xmasOverallHtml(budget))+
+    '<div style="display:flex;gap:10px 14px;flex-wrap:wrap;">'+row+'</div>'+bar+
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
   '</div>';
@@ -3836,7 +3853,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASPOT2";
+var HEATH_BUILD="2026-10-03-XMASROW";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
