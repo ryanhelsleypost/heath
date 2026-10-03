@@ -619,12 +619,13 @@ function renderXmas(){
   h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+
     (pot?'':xmasOverallHtml(budget))+
     '<div style="display:flex;gap:10px 14px;flex-wrap:wrap;">'+row+'</div>'+bar+
+    (xmasCookieCount()?'<div style="font-size:13px;font-weight:700;color:#d6a15b;margin-bottom:4px;">🍪 '+xmasCookieCount()+' '+(xmasCookieCount()===1?'person':'people')+' getting cookies</div>':'')+
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
   '</div>';
   var anyOpen=X.recipients.some(function(r){return r.open===true;});
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 6px;font-size:11px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">'+
-    '<span>'+X.recipients.length+' on the list</span>'+
+    '<span>'+X.recipients.length+' on the list'+(xmasCookieCount()?' · <span style="color:#d6a15b;">🍪 '+xmasCookieCount()+'</span>':'')+'</span>'+
     '<button class="btn" style="font-size:11px;padding:3px 9px;" onclick="xmasSetAllOpen('+(anyOpen?'false':'true')+')">'+(anyOpen?'▴ Collapse all':'▾ Expand all')+'</button></div>';
   h+='<div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg2);margin-bottom:12px;">'+
     X.recipients.map(function(r,i){return xmasRecipientCard(r,i===X.recipients.length-1);}).join('')+'</div>';
@@ -666,6 +667,7 @@ function xmasRecipientCard(r,last){
   var meta=[all.length?all.length+' gift'+(all.length!==1?'s':''):'no gifts yet'];
   if(r.kind==='group') meta.push((r.members||[]).length+' member'+((r.members||[]).length!==1?'s':''));
   if(bought) meta.push('✓'+bought+' bought');
+  if(r.kind==='group'){ var gc=(r.members||[]).filter(function(m){return m.cookies;}).length; if(gc) meta.push('🍪'+gc); }
   var h='<div style="border-left:3px solid '+accent+';'+(last?'':'border-bottom:1px solid var(--border);')+'">'+
     '<div class="xr-row" style="display:flex;align-items:center;gap:9px;padding:8px 10px 8px 11px;cursor:pointer;" data-r="'+r.id+'" onclick="xmasToggleOpen(this.dataset.r)">'+
       '<span style="font-size:10px;color:var(--text-dim);width:9px;">'+(open?'▾':'▸')+'</span>'+
@@ -678,6 +680,7 @@ function xmasRecipientCard(r,last){
         '</div>'+
       '</div>'+
       '<div style="font-size:13px;white-space:nowrap;">'+xmasTotLine(cost,budget)+'</div>'+
+      (r.kind==='group'?'<span style="display:inline-block;width:27px;"></span>':xmasCookieBtn(!!r.cookies,r.id,null))+
       '<button class="act-btn" style="font-size:13px;padding:4px 6px;" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
     '</div>';
   if(open){
@@ -685,7 +688,7 @@ function xmasRecipientCard(r,last){
     if(r.kind==='group'){
       (r.members||[]).forEach(function(m){
         var mg=xmasGiftsOf(r.id,m.id);
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 14px 5px 34px;font-size:11.5px;color:var(--text-mid);letter-spacing:.03em;"><span style="font-weight:700;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span></div>';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 10px 3px 34px;font-size:11.5px;color:var(--text-mid);letter-spacing:.03em;"><span style="font-weight:700;flex:1;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span>'+xmasCookieBtn(!!m.cookies,r.id,m.id)+'</div>';
         mg.forEach(function(g){h+=xmasGiftRow(g);});
         h+=xmasAddGiftBtn(r.id,m.id,'Add for '+esc(m.name)+'…');
       });
@@ -702,6 +705,17 @@ function xmasRecipientCard(r,last){
     h+='</div>';
   }
   return h+'</div>';
+}
+// ── 🍪 cookies: counted per INDIVIDUAL (people + group members, never a group itself) (build 2026-10-03-XMASCOOKIE) ──
+function xmasCookieCount(){ var n=0; ensureXmas().recipients.forEach(function(r){ if(r.kind==='group') (r.members||[]).forEach(function(m){ if(m.cookies) n++; }); else if(r.cookies) n++; }); return n; }
+function xmasCookieBtn(on,rid,mid){
+  return '<button class="act-btn" title="'+(on?'Getting cookies — tap to remove':'Tap to add to the cookie list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleCookie(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 5px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🍪</button>';
+}
+function xmasToggleCookie(rid,mid){
+  var r=xmasR(rid); if(!r) return;
+  if(mid){ var m=(r.members||[]).find(function(x){return x.id===mid;}); if(m) m.cookies=!m.cookies; }
+  else r.cookies=!r.cookies;
+  persist(); renderXmas();
 }
 function xmasSetAllOpen(v){ ensureXmas().recipients.forEach(function(r){r.open=v;}); persist(); renderXmas(); }
 function xmasArchiveHtml(){
@@ -753,13 +767,14 @@ function xmasSaveGift(rid,gid){
 function xmasRecipientModal(rid,kind){
   var r=rid?xmasR(rid):{name:'',budget:'',kind:kind||'person',members:[]};
   var isG=r.kind==='group';
-  var mem=(r.members||[]).map(function(m){return xmasMemberRowHtml(m.id,m.name,m.budget);}).join('');
+  var mem=(r.members||[]).map(function(m){return xmasMemberRowHtml(m.id,m.name,m.budget,m.cookies);}).join('');
   document.getElementById('modal-root').innerHTML=
     '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal sm">'+
       '<h2>'+(isG?'👨‍👩‍👧 ':'🎁 ')+(rid?'Edit ':'New ')+(isG?'group':'person')+'</h2>'+
       '<span class="m-lbl">Name</span><input class="m-input" id="xr-name" value="'+esc(r.name)+'" placeholder="'+(isG?'e.g. Helsley Family':'e.g. Jordan')+'">'+
       '<span class="m-lbl">'+(isG?'Group budget ($) — blank = sum of members':'Budget ($)')+xmasPotHint(rid)+'</span><input class="m-input" id="xr-budget" type="number" inputmode="decimal" min="0" step="1" value="'+(r.budget||'')+'">'+
-      (isG?'<span class="m-lbl">Members &amp; their budgets</span><div id="xr-members">'+mem+'</div>'+
+      (!isG?'<label style="display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:13px;color:var(--text-mid);cursor:pointer;"><input type="checkbox" id="xr-cookies" '+(r.cookies?'checked':'')+' style="width:15px;height:15px;accent-color:#d6a15b;"> 🍪 Getting cookies</label>':'')+
+      (isG?'<span class="m-lbl">Members, budgets &amp; 🍪</span><div id="xr-members">'+mem+'</div>'+
         '<button class="btn" style="font-size:12px;margin:2px 0 10px;" onclick="xmasAddMemberRow()">＋ Member</button>':'')+
       (rid?'<span class="m-lbl">Shopping date for all undated gifts (optional)</span><input class="m-input" id="xr-date" type="date">':'')+
       '<div class="m-actions" style="flex-wrap:wrap;gap:6px;">'+
@@ -770,10 +785,11 @@ function xmasRecipientModal(rid,kind){
   if(isG&&!(r.members||[]).length) xmasAddMemberRow();
   setTimeout(function(){var e=document.getElementById('xr-name');if(e&&!rid)e.focus();},50);
 }
-function xmasMemberRowHtml(id,name,budget){
+function xmasMemberRowHtml(id,name,budget,cookies){
   return '<div class="xr-mem" data-id="'+(id||'')+'" style="display:flex;gap:6px;margin-bottom:6px;">'+
     '<input class="m-input xr-mn" style="flex:2;margin:0;" placeholder="Name" value="'+esc(name||'')+'">'+
     '<input class="m-input xr-mb" style="flex:1;margin:0;" type="number" inputmode="decimal" min="0" placeholder="$" value="'+(budget||'')+'">'+
+    '<label title="Getting cookies" style="display:flex;align-items:center;gap:3px;font-size:14px;cursor:pointer;"><input type="checkbox" class="xr-mc" '+(cookies?'checked':'')+' style="width:15px;height:15px;accent-color:#d6a15b;">🍪</label>'+
     '<button class="act-btn del" onclick="this.parentElement.remove()">✕</button></div>';
 }
 function xmasAddMemberRow(){ var c=document.getElementById('xr-members'); if(c) c.insertAdjacentHTML('beforeend',xmasMemberRowHtml('','','')); }
@@ -784,11 +800,12 @@ function xmasSaveRecipient(rid,kind){
   var r=rid?xmasR(rid):null;
   if(!r){ r={id:uid(),kind:kind||'person',members:[],open:false}; X.recipients.push(r); }
   r.name=name; r.budget=budget;
+  var ck=document.getElementById('xr-cookies'); if(ck) r.cookies=!!ck.checked;
   if(r.kind==='group'){
     var keep=[];
     document.querySelectorAll('#xr-members .xr-mem').forEach(function(row){
       var nm=(row.querySelector('.xr-mn').value||'').trim(); if(!nm) return;
-      keep.push({id:row.dataset.id||uid(),name:nm,budget:parseFloat(row.querySelector('.xr-mb').value)||0});
+      keep.push({id:row.dataset.id||uid(),name:nm,budget:parseFloat(row.querySelector('.xr-mb').value)||0,cookies:!!(row.querySelector('.xr-mc')||{}).checked});
     });
     var ids=keep.map(function(m){return m.id;});
     X.gifts.forEach(function(g){ if(g.rid===r.id&&g.mid&&ids.indexOf(g.mid)<0) g.mid=null; }); // removed member → gift moves to whole group
@@ -3874,7 +3891,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASLIST";
+var HEATH_BUILD="2026-10-03-XMASCOOKIE";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
