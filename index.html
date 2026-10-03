@@ -575,7 +575,8 @@ function renderXmas(){
   var cost=xmasCostSum(X.gifts);
   var bought=xmasCostSum(X.gifts.filter(function(g){return g.bought;}));
   var undated=X.gifts.filter(function(g){return !g.date;}).length;
-  var left=budget-cost, pct=budget>0?Math.min(100,Math.round(cost/budget*100)):0;
+  var pot=Number(X.overall)||0, base=pot||budget;
+  var left=base-cost, pct=base>0?Math.min(100,Math.round(cost/base*100)):0;
   var h='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:14px 0 12px;flex-wrap:wrap;">'+
     '<div style="font-size:14px;color:var(--text-dim);">🎄 Christmas '+X.year+' — dated gifts flow into your pay periods.</div>'+
     '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+
@@ -596,11 +597,11 @@ function renderXmas(){
   h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+
     xmasOverallHtml(budget)+
     '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
-      '<div><div class="stat-lbl">Total cost</div><div style="font-size:22px;font-weight:700;color:'+(cost>budget&&budget>0?'var(--red)':'var(--text)')+';">'+fmtD(cost)+'</div></div>'+
-      '<div><div class="stat-lbl">Total budget</div><div style="font-size:22px;font-weight:700;">'+fmtD(budget)+'</div></div>'+
-      '<div><div class="stat-lbl">'+(left>=0?'Left':'Over')+'</div><div style="font-size:22px;font-weight:700;color:'+(left>=0?'var(--green)':'var(--red)')+';">'+fmtD(left)+'</div></div>'+
+      '<div><div class="stat-lbl">Total cost</div><div style="font-size:22px;font-weight:700;color:'+(cost>base&&base>0?'var(--red)':'var(--text)')+';">'+fmtD(cost)+'</div></div>'+
+      (pot?'':'<div><div class="stat-lbl">Total budget</div><div style="font-size:22px;font-weight:700;">'+fmtD(budget)+'</div></div>')+
+      '<div><div class="stat-lbl">'+(left>=0?'Left'+(pot?' of overall':''):'Over'+(pot?' overall':''))+'</div><div style="font-size:22px;font-weight:700;color:'+(left>=0?'var(--green)':'var(--red)')+';">'+fmtD(left)+'</div></div>'+
     '</div>'+
-    '<div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden;margin:10px 0 6px;"><div style="height:8px;width:'+pct+'%;background:'+(cost>budget&&budget>0?'var(--red)':'var(--green)')+';"></div></div>'+
+    '<div style="background:var(--border);border-radius:6px;height:8px;overflow:hidden;margin:10px 0 6px;"><div style="height:8px;width:'+pct+'%;background:'+(cost>base&&base>0?'var(--red)':'var(--green)')+';"></div></div>'+
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
   '</div>';
@@ -3835,7 +3836,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASPOT";
+var HEATH_BUILD="2026-10-03-XMASPOT2";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
