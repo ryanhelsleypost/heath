@@ -145,6 +145,8 @@ button.ver-chk.off:hover{border-color:#16a34a;color:#16a34a;}
 .ico-opt .bill-ico{margin:0;width:auto;font-size:17px;}
 .ico-opt .bill-ico svg{width:18px;height:18px;}
 .ico-opt.sel{border-color:var(--green);color:var(--green);background:var(--green-dim);}
+.xck-slot{display:inline-flex;align-items:center;justify-content:flex-end;gap:1px;width:58px;flex:0 0 58px;}
+.xck-pen{display:inline-block;width:34px;flex:0 0 34px;text-align:center;}
 .bill-amt.out{color:var(--red);} .bill-amt.in{color:var(--green);} .bill-amt.vac{color:#4ade80;} .bill-amt.dim{color:var(--text-dim);}
 .bill-acts{display:flex;gap:5px;opacity:1;}
 .act-btn{font-size:16px;line-height:1;padding:5px 7px;border:none;border-radius:6px;background:transparent;cursor:pointer;opacity:1;-webkit-tap-highlight-color:transparent;}
@@ -667,7 +669,6 @@ function xmasRecipientCard(r,last){
   var meta=[all.length?all.length+' gift'+(all.length!==1?'s':''):'no gifts yet'];
   if(r.kind==='group') meta.push((r.members||[]).length+' member'+((r.members||[]).length!==1?'s':''));
   if(bought) meta.push('✓'+bought+' bought');
-  if(r.kind==='group'){ var gc=(r.members||[]).filter(function(m){return m.cookies;}).length; if(gc) meta.push('🍪'+gc); }
   var h='<div style="border-left:3px solid '+accent+';'+(last?'':'border-bottom:1px solid var(--border);')+'">'+
     '<div class="xr-row" style="display:flex;align-items:center;gap:9px;padding:8px 10px 8px 11px;cursor:pointer;" data-r="'+r.id+'" onclick="xmasToggleOpen(this.dataset.r)">'+
       '<span style="font-size:10px;color:var(--text-dim);width:9px;">'+(open?'▾':'▸')+'</span>'+
@@ -680,15 +681,16 @@ function xmasRecipientCard(r,last){
         '</div>'+
       '</div>'+
       '<div style="font-size:13px;white-space:nowrap;">'+xmasTotLine(cost,budget)+'</div>'+
-      (r.kind==='group'?'<span style="display:inline-block;width:27px;"></span>':xmasCookieBtn(!!r.cookies,r.id,null))+
-      '<button class="act-btn" style="font-size:13px;padding:4px 6px;" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
+      (r.kind==='group'?(function(){var gc=(r.members||[]).reduce(function(n,m){return n+(m.cookies?xmasHeads(m):0);},0);
+         return '<span class="xck-slot" title="Cookies for this group\'s members — set them per member">'+(gc?'<span style="font-size:10.5px;color:#d6a15b;">×'+gc+'</span>':'')+'<button class="act-btn" tabindex="-1" onclick="event.stopPropagation()" style="font-size:14px;padding:3px 4px;cursor:default;'+(gc?'':'opacity:.12;filter:grayscale(1);')+'">🍪</button>'+'</span>';})():xmasCookieBtn(!!r.cookies,r.id,null))+
+      '<button class="act-btn xck-pen" style="font-size:13px;padding:4px 6px;" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
     '</div>';
   if(open){
     h+='<div style="border-top:1px solid var(--border);background:rgba(0,0,0,.12);">';
     if(r.kind==='group'){
       (r.members||[]).forEach(function(m){
         var mg=xmasGiftsOf(r.id,m.id);
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 10px 3px 34px;font-size:11.5px;color:var(--text-mid);letter-spacing:.03em;"><span style="font-weight:700;flex:1;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span>'+xmasCookieBtn(!!m.cookies,r.id,m.id)+'</div>';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 10px 3px 34px;font-size:11.5px;color:var(--text-mid);letter-spacing:.03em;"><span style="font-weight:700;flex:1;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span>'+xmasCookieBtn(!!m.cookies,r.id,m.id)+'<span class="xck-pen"></span></div>';
         mg.forEach(function(g){h+=xmasGiftRow(g);});
         h+=xmasAddGiftBtn(r.id,m.id,'Add for '+esc(m.name)+'…');
       });
@@ -711,7 +713,7 @@ function xmasHeads(x){ var n=parseInt(x&&x.people,10); if(n>0) return n; return 
 function xmasCookieCount(){ var n=0; ensureXmas().recipients.forEach(function(r){ if(r.kind==='group') (r.members||[]).forEach(function(m){ if(m.cookies) n+=xmasHeads(m); }); else if(r.cookies) n+=xmasHeads(r); }); return n; }
 function xmasCookieBtn(on,rid,mid){
   var r=xmasR(rid), x=mid?((r&&r.members)||[]).find(function(m){return m.id===mid;}):r, k=xmasHeads(x);
-  return (k>1?'<span style="font-size:10.5px;color:'+(on?'#d6a15b':'var(--text-dim)')+';margin-right:-4px;" title="'+k+' people">×'+k+'</span>':'')+'<button class="act-btn" title="'+(on?'Getting cookies — tap to remove':'Tap to add to the cookie list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleCookie(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 5px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🍪</button>';
+  return '<span class="xck-slot">'+(k>1?'<span style="font-size:10.5px;color:'+(on?'#d6a15b':'var(--text-dim)')+';" title="'+k+' people">×'+k+'</span>':'')+'<button class="act-btn" title="'+(on?'Getting cookies — tap to remove':'Tap to add to the cookie list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleCookie(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 4px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🍪</button></span>';
 }
 function xmasToggleCookie(rid,mid){
   var r=xmasR(rid); if(!r) return;
@@ -3899,7 +3901,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASCOUNT";
+var HEATH_BUILD="2026-10-03-XMASALIGN";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
