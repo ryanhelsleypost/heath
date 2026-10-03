@@ -533,6 +533,40 @@ function xmasBillRow(p){
 function xmasSave(){ persist(); render(); renderXmas(); }
 function xmasFmtDate(d){ return d?new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''; }
 
+// ── overall budget: one pot that people's budgets are carved out of (build 2026-10-03-XMASPOT) ──
+function xmasOverallHtml(assigned){
+  var X=ensureXmas(), pot=Number(X.overall)||0;
+  if(!pot) return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">'+
+    '<span style="font-size:13px;color:var(--text-dim);">Set one overall Christmas budget to carve people\'s budgets out of.</span>'+
+    '<button class="btn" style="flex-shrink:0;" onclick="xmasOverallModal()">＋ Overall budget</button></div>';
+  var un=pot-assigned, pct=pot>0?Math.min(100,Math.round(assigned/pot*100)):0;
+  return '<div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border);">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'+
+      '<div style="cursor:pointer;" onclick="xmasOverallModal()" title="Tap to change"><div class="stat-lbl">Overall budget ✏️</div><div style="font-size:24px;font-weight:700;">'+fmtD(pot)+'</div></div>'+
+      '<div><div class="stat-lbl">Given to people</div><div style="font-size:24px;font-weight:700;">'+fmtD(assigned)+'</div></div>'+
+      '<div><div class="stat-lbl">'+(un>=0?'Unassigned':'Over-assigned')+'</div><div style="font-size:24px;font-weight:700;color:'+(un>=0?'var(--green)':'var(--red)')+';">'+fmtD(un)+'</div></div>'+
+    '</div>'+
+    '<div style="background:var(--border);border-radius:6px;height:6px;overflow:hidden;margin-top:8px;"><div style="height:6px;width:'+pct+'%;background:'+(un>=0?'var(--blue,#60a5fa)':'var(--red)')+';"></div></div>'+
+    (un<0?'<div style="font-size:12px;color:var(--red);margin-top:6px;">People\'s budgets add up to '+fmtD(-un)+' more than your overall budget.</div>':'')+
+  '</div>';
+}
+function xmasPotHint(rid){
+  var X=ensureXmas(), pot=Number(X.overall)||0; if(!pot) return '';
+  var used=X.recipients.reduce(function(s,r){return s+(r.id===rid?0:xmasGroupBudget(r));},0);
+  return ' <span style="color:var(--green);text-transform:none;letter-spacing:0;">· '+fmtD(Math.max(0,pot-used))+' unassigned</span>';
+}
+function xmasOverallModal(){
+  var X=ensureXmas();
+  document.getElementById('modal-root').innerHTML=
+    '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal sm">'+
+      '<h2>🎄 Overall Christmas budget</h2>'+
+      '<span class="m-lbl">Total you want to spend this year ($)</span>'+
+      '<input class="m-input" id="xo-amt" type="number" inputmode="decimal" min="0" step="1" value="'+(X.overall||'')+'" placeholder="e.g. 1500">'+
+      '<div class="m-actions"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="xmasSaveOverall()">Save</button></div>'+
+    '</div></div>';
+  setTimeout(function(){var e=document.getElementById('xo-amt');if(e){e.focus();e.select();}},50);
+}
+function xmasSaveOverall(){ var v=parseFloat(document.getElementById('xo-amt').value); ensureXmas().overall=isNaN(v)?0:Math.max(0,v); closeModal(); xmasSave(); }
 // ── tab ──
 function renderXmas(){
   var root=document.getElementById('tab-xmas'); if(!root) return;
@@ -555,10 +589,12 @@ function renderXmas(){
       '<div style="font-size:15px;font-weight:600;margin-bottom:6px;">Who are you shopping for?</div>'+
       '<div style="font-size:13px;margin-bottom:14px;">Add everyone at once with their budgets, then add gifts under each person.</div>'+
       '<button class="btn primary" onclick="xmasSetupModal()">⚡ Set up my list</button></div>';
+    h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+xmasOverallHtml(0)+'</div>';
     root.innerHTML=h+xmasArchiveHtml(); return;
   }
   // summary
   h+='<div style="border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:12px;background:var(--bg2);">'+
+    xmasOverallHtml(budget)+
     '<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">'+
       '<div><div class="stat-lbl">Total cost</div><div style="font-size:22px;font-weight:700;color:'+(cost>budget&&budget>0?'var(--red)':'var(--text)')+';">'+fmtD(cost)+'</div></div>'+
       '<div><div class="stat-lbl">Total budget</div><div style="font-size:22px;font-weight:700;">'+fmtD(budget)+'</div></div>'+
@@ -683,7 +719,7 @@ function xmasRecipientModal(rid,kind){
     '<div class="modal-backdrop" onclick="if(event.target===this)closeModal()"><div class="modal sm">'+
       '<h2>'+(isG?'👨‍👩‍👧 ':'🎁 ')+(rid?'Edit ':'New ')+(isG?'group':'person')+'</h2>'+
       '<span class="m-lbl">Name</span><input class="m-input" id="xr-name" value="'+esc(r.name)+'" placeholder="'+(isG?'e.g. Helsley Family':'e.g. Jordan')+'">'+
-      '<span class="m-lbl">'+(isG?'Group budget ($) — blank = sum of members':'Budget ($)')+'</span><input class="m-input" id="xr-budget" type="number" inputmode="decimal" min="0" step="1" value="'+(r.budget||'')+'">'+
+      '<span class="m-lbl">'+(isG?'Group budget ($) — blank = sum of members':'Budget ($)')+xmasPotHint(rid)+'</span><input class="m-input" id="xr-budget" type="number" inputmode="decimal" min="0" step="1" value="'+(r.budget||'')+'">'+
       (isG?'<span class="m-lbl">Members &amp; their budgets</span><div id="xr-members">'+mem+'</div>'+
         '<button class="btn" style="font-size:12px;margin:2px 0 10px;" onclick="xmasAddMemberRow()">＋ Member</button>':'')+
       (rid?'<span class="m-lbl">Shopping date for all undated gifts (optional)</span><input class="m-input" id="xr-date" type="date">':'')+
@@ -3799,7 +3835,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMAS";
+var HEATH_BUILD="2026-10-03-XMASPOT";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
