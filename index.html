@@ -724,7 +724,8 @@ function xmasHeads(x){ var n=parseInt(x&&x.people,10); if(n>0) return n; return 
 function xmasGetsGift(x){ return !(x&&x.gift===false); }
 function xmasEntries(){ var out=[]; ensureXmas().recipients.forEach(function(r){ if(r.kind==='group') (r.members||[]).forEach(function(m){out.push({r:r,x:m});}); else out.push({r:r,x:r}); }); return out; }
 function xmasGiftCount(){ return xmasEntries().filter(function(e){return xmasGetsGift(e.x);}).length; }
-function xmasBoxCount(){ return xmasEntries().filter(function(e){return e.x.cookies;}).length; }
+// one box per entry on the list: a person with cookies, or a group where any member gets cookies
+function xmasBoxCount(){ return ensureXmas().recipients.filter(function(r){ return r.kind==='group'?(r.members||[]).some(function(m){return m.cookies;}):!!r.cookies; }).length; }
 function xmasGiftBtn(on,rid,mid){
   return '<span class="xgf-slot"><button class="act-btn" title="'+(on?'Getting a gift — tap for cookies/no gift':'No gift — tap to add back to the gift list')+'" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="event.stopPropagation();xmasToggleGift(this.dataset.r,this.dataset.m||null)" style="font-size:14px;padding:3px 4px;'+(on?'':'opacity:.22;filter:grayscale(1);')+'">🎁</button></span>';
 }
@@ -3969,7 +3970,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASSUP";
+var HEATH_BUILD="2026-10-03-XMASBOX";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
