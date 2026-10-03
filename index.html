@@ -622,7 +622,12 @@ function renderXmas(){
     '<div style="font-size:12px;color:var(--text-dim);">✓ Bought '+fmtD(bought)+' · still to buy '+fmtD(Math.max(0,cost-bought))+(undated?' · <span style="color:var(--amber);">'+undated+' undated gift'+(undated>1?'s':'')+' not in Heath yet</span>':'')+'</div>'+
     xmasHeathHtml()+
   '</div>';
-  X.recipients.forEach(function(r){ h+=xmasRecipientCard(r); });
+  var anyOpen=X.recipients.some(function(r){return r.open===true;});
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 2px 6px;font-size:11px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">'+
+    '<span>'+X.recipients.length+' on the list</span>'+
+    '<button class="btn" style="font-size:11px;padding:3px 9px;" onclick="xmasSetAllOpen('+(anyOpen?'false':'true')+')">'+(anyOpen?'▴ Collapse all':'▾ Expand all')+'</button></div>';
+  h+='<div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--bg2);margin-bottom:12px;">'+
+    X.recipients.map(function(r,i){return xmasRecipientCard(r,i===X.recipients.length-1);}).join('')+'</div>';
   h+='<div style="margin:18px 0 6px;display:flex;justify-content:flex-end;"><button class="btn" style="font-size:12px;" onclick="xmasNewYear()">🗓 Start '+(X.year+1)+' list</button></div>';
   root.innerHTML=h+xmasArchiveHtml();
 }
@@ -636,47 +641,57 @@ function xmasHeathHtml(){
 }
 function xmasGiftRow(g){
   var eff=xmasEffective(g), has=xmasHasCost(g);
-  return '<div class="bill-row'+(g.bought?' cleared':'')+'">'+
+  return '<div class="bill-row'+(g.bought?' cleared':'')+'" style="padding-left:24px;">'+
     '<button class="status-btn'+(g.bought?' cleared':'')+'" title="'+(g.bought?'Bought — tap to unmark':'Tap when bought')+'" data-g="'+g.id+'" onclick="xmasToggleBought(this.dataset.g)">'+(g.bought?'✓':'·')+'</button>'+
-    '<div class="bill-day" style="min-width:44px;font-size:11px;">'+(g.date?xmasFmtDate(g.date):'<span style="color:var(--amber);">no date</span>')+'</div>'+
+    '<div class="bill-day" style="min-width:46px;font-size:11px;white-space:nowrap;">'+(g.date?xmasFmtDate(g.date):'<span style="color:var(--amber);" title="No date — not in Heath yet">—</span>')+'</div>'+
     '<div class="bill-name'+(g.bought?' struck':'')+'">'+esc(g.desc||'Gift')+'</div>'+
     '<div class="bill-amt" style="color:var(--text);">'+(has?fmtD(g.cost):'<span style="color:var(--text-dim);font-size:12px;" title="No cost yet — using its share of the budget">~'+fmtD(eff)+'</span>')+'</div>'+
     '<div class="bill-acts"><button class="act-btn" data-g="'+g.id+'" onclick="xmasGiftModal(null,null,this.dataset.g)">✏️</button><button class="act-btn del" data-g="'+g.id+'" onclick="xmasDelGift(this.dataset.g)">🗑️</button></div>'+
   '</div>';
 }
 function xmasAddGiftBtn(rid,mid,label){
-  return '<div class="bill-row" style="cursor:pointer;" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="xmasGiftModal(this.dataset.r,this.dataset.m||null)">'+
+  return '<div class="bill-row" style="cursor:pointer;padding-left:24px;" data-r="'+rid+'" data-m="'+(mid||'')+'" onclick="xmasGiftModal(this.dataset.r,this.dataset.m||null)">'+
     '<div class="status-btn" style="border:none;color:var(--text-dim);font-size:16px;">＋</div><div style="flex:1;font-size:13px;color:var(--text-dim);">'+(label||'Add a gift…')+'</div></div>';
 }
 function xmasTotLine(cost,budget){
   var over=budget>0&&cost>budget;
-  return '<span style="color:'+(over?'var(--red)':budget>0?'var(--green)':'var(--text)')+';font-weight:700;">'+fmtD(cost)+'</span>'+(budget>0?'<span style="color:var(--text-dim);"> / '+fmtD(budget)+'</span>':'');
+  return '<span style="color:'+(over?'var(--red)':!cost?'var(--text-dim)':budget>0?'var(--green)':'var(--text)')+';font-weight:700;">'+fmtD(cost)+'</span>'+(budget>0?'<span style="color:var(--text-dim);"> / '+fmtD(budget)+'</span>':'');
 }
-function xmasRecipientCard(r){
-  var all=xmasGiftsOf(r.id), cost=xmasCostSum(all), budget=xmasGroupBudget(r), open=r.open!==false;
-  var h='<div style="border:1px solid var(--border2);border-radius:10px;margin-bottom:10px;background:var(--bg2);overflow:hidden;">'+
-    '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;" data-r="'+r.id+'" onclick="xmasToggleOpen(this.dataset.r)">'+
-      '<span style="font-size:18px;">'+(r.kind==='group'?'👨‍👩‍👧':'🎁')+'</span>'+
-      '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(r.name)+'</div>'+
-        '<div style="font-size:11px;color:var(--text-dim);">'+all.length+' gift'+(all.length!==1?'s':'')+(r.kind==='group'?' · '+(r.members||[]).length+' member'+((r.members||[]).length!==1?'s':''):'')+'</div></div>'+
-      '<div style="font-size:14px;white-space:nowrap;">'+xmasTotLine(cost,budget)+'</div>'+
-      '<button class="act-btn" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
-      '<span style="color:var(--text-dim);font-size:12px;">'+(open?'▴':'▾')+'</span>'+
+// Compact list rows, collapsed by default (build 2026-10-03-XMASLIST)
+function xmasRecipientCard(r,last){
+  var all=xmasGiftsOf(r.id), cost=xmasCostSum(all), budget=xmasGroupBudget(r), open=r.open===true;
+  var over=budget>0&&cost>budget, pct=budget>0?Math.min(100,Math.round(cost/budget*100)):0;
+  var accent=!all.length?'var(--border2)':over?'var(--red)':'var(--green)';
+  var bought=all.filter(function(g){return g.bought;}).length;
+  var meta=[all.length?all.length+' gift'+(all.length!==1?'s':''):'no gifts yet'];
+  if(r.kind==='group') meta.push((r.members||[]).length+' member'+((r.members||[]).length!==1?'s':''));
+  if(bought) meta.push('✓'+bought+' bought');
+  var h='<div style="border-left:3px solid '+accent+';'+(last?'':'border-bottom:1px solid var(--border);')+'">'+
+    '<div class="xr-row" style="display:flex;align-items:center;gap:9px;padding:8px 10px 8px 11px;cursor:pointer;" data-r="'+r.id+'" onclick="xmasToggleOpen(this.dataset.r)">'+
+      '<span style="font-size:10px;color:var(--text-dim);width:9px;">'+(open?'▾':'▸')+'</span>'+
+      '<span style="font-size:15px;line-height:1;">'+(r.kind==='group'?'👥':'🎁')+'</span>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(r.name)+'</div>'+
+        '<div style="display:flex;align-items:center;gap:7px;margin-top:3px;min-width:0;">'+
+          (budget>0?'<div style="flex:0 0 56px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;"><div style="height:3px;width:'+pct+'%;background:'+(over?'var(--red)':'var(--green)')+';"></div></div>':'')+
+          '<span style="font-size:10.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+meta.join(' · ')+'</span>'+
+        '</div>'+
+      '</div>'+
+      '<div style="font-size:13px;white-space:nowrap;">'+xmasTotLine(cost,budget)+'</div>'+
+      '<button class="act-btn" style="font-size:13px;padding:4px 6px;" data-r="'+r.id+'" onclick="event.stopPropagation();xmasRecipientModal(this.dataset.r)">✏️</button>'+
     '</div>';
   if(open){
-    h+='<div style="border-top:1px solid var(--border);">';
+    h+='<div style="border-top:1px solid var(--border);background:rgba(0,0,0,.12);">';
     if(r.kind==='group'){
       (r.members||[]).forEach(function(m){
         var mg=xmasGiftsOf(r.id,m.id);
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 14px;background:var(--surface2);font-size:12px;letter-spacing:.04em;"><span style="font-weight:700;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span></div>';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 14px 5px 34px;font-size:11.5px;color:var(--text-mid);letter-spacing:.03em;"><span style="font-weight:700;">'+esc(m.name)+'</span><span>'+xmasTotLine(xmasCostSum(mg),Number(m.budget)||0)+'</span></div>';
         mg.forEach(function(g){h+=xmasGiftRow(g);});
-        h+=xmasAddGiftBtn(r.id,m.id,'Add a gift for '+esc(m.name)+'…');
+        h+=xmasAddGiftBtn(r.id,m.id,'Add for '+esc(m.name)+'…');
       });
-      // No automatic "Whole family" section (build 2026-10-03-XMASNOWHOLE). Only shown if older gifts are already filed there,
-      // or if the group has no members yet, so nothing goes missing.
       var gg=xmasGiftsOf(r.id,null);
       if(gg.length||!(r.members||[]).length){
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 14px;background:var(--surface2);font-size:12px;"><span style="font-weight:700;">'+((r.members||[]).length?'Whole '+esc(r.name):esc(r.name))+'</span><span>'+xmasTotLine(xmasCostSum(gg),0)+'</span></div>';
+        if((r.members||[]).length) h+='<div style="padding:5px 14px 5px 34px;font-size:11.5px;color:var(--text-mid);font-weight:700;">Whole '+esc(r.name)+'</div>';
         gg.forEach(function(g){h+=xmasGiftRow(g);});
         if(!(r.members||[]).length) h+=xmasAddGiftBtn(r.id,null);
       }
@@ -688,12 +703,13 @@ function xmasRecipientCard(r){
   }
   return h+'</div>';
 }
+function xmasSetAllOpen(v){ ensureXmas().recipients.forEach(function(r){r.open=v;}); persist(); renderXmas(); }
 function xmasArchiveHtml(){
   var A=ensureXmas().archive, ys=Object.keys(A).sort().reverse(); if(!ys.length) return '';
   return '<div style="font-size:12px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px;">Past years</div>'+
     ys.map(function(y){var a=A[y]||{};var c=xmasCostSum(a.gifts||[]);return '<div style="border:1px dashed var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:8px;opacity:.7;display:flex;justify-content:space-between;font-size:13px;"><span>🎄 '+y+' · '+(a.recipients||[]).length+' people · '+(a.gifts||[]).length+' gifts</span><span>'+fmtD(c)+'</span></div>';}).join('');
 }
-function xmasToggleOpen(rid){ var r=xmasR(rid); if(r){ r.open=r.open===false; persist(); renderXmas(); } }
+function xmasToggleOpen(rid){ var r=xmasR(rid); if(r){ r.open=r.open!==true; persist(); renderXmas(); } }
 function xmasToggleBought(gid){ var g=xmasGift(gid); if(g){ g.bought=!g.bought; xmasSave(); } }
 function xmasDelGift(gid){ var g=xmasGift(gid); if(!g||!confirm('Delete "'+(g.desc||'gift')+'"?')) return; var X=ensureXmas(); X.gifts=X.gifts.filter(function(x){return x.id!==gid;}); xmasSave(); }
 
@@ -766,7 +782,7 @@ function xmasSaveRecipient(rid,kind){
   if(!name){ alert('Give them a name.'); return; }
   var bv=document.getElementById('xr-budget').value, budget=bv===''?0:(parseFloat(bv)||0);
   var r=rid?xmasR(rid):null;
-  if(!r){ r={id:uid(),kind:kind||'person',members:[],open:true}; X.recipients.push(r); }
+  if(!r){ r={id:uid(),kind:kind||'person',members:[],open:false}; X.recipients.push(r); }
   r.name=name; r.budget=budget;
   if(r.kind==='group'){
     var keep=[];
@@ -822,7 +838,7 @@ function xmasSetupSave(){
     var p=xmasParseLine(line); if(!p) return;
     var ex=X.recipients.find(function(r){return r.name.toLowerCase()===p.name.toLowerCase();});
     if(ex){ ex.budget=p.budget||ex.budget; if(p.members.length){ex.kind='group';p.members.forEach(function(m){var em=ex.members.find(function(x){return x.name.toLowerCase()===m.name.toLowerCase();}); if(em) em.budget=m.budget||em.budget; else ex.members.push(m);});} }
-    else X.recipients.push({id:uid(),name:p.name,budget:p.budget,kind:p.members.length?'group':'person',members:p.members,open:true});
+    else X.recipients.push({id:uid(),name:p.name,budget:p.budget,kind:p.members.length?'group':'person',members:p.members,open:false});
     added++;
   });
   closeModal(); if(added) xmasSave(); else renderXmas();
@@ -3858,7 +3874,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASNOWHOLE";
+var HEATH_BUILD="2026-10-03-XMASLIST";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
