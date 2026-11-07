@@ -3327,12 +3327,18 @@ function exportData(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ledger_'+new Date().toISOString().split('T')[0]+'.json';a.click();URL.revokeObjectURL(a.href);
 }
 
-// ═══ TRENDS (balance graph) ═══ (build 2026-11-06-TRENDS)
+// ═══ TRENDS (balance graph) ═══ (build 2026-11-06-TRENDS, what-if bills 2026-11-06-WHATIF)
 // Line chart of balance over time. Solid = actual (daily snapshots of S.balance
 // recorded in persist() + settled period-end balances recorded on advance).
-// Dashed = projected period-end balances from getRunningBals().
-// Range: 3M / 6M / 1Y; ◀ ▶ page the window by one range-length.
-var TR = { range: 6, page: 0, sel: null };
+// Dashed green = projected period-end balances from getRunningBals().
+// Purple = projection WITH the draft (what-if) bill. Draft lives only in TR.draft
+// until "Lock it in" pushes a real one-off bill into that period's expenses.
+// 💡 = paydown opportunities (computeOpportunities) — periods with spare room.
+var TR = { range: 6, page: 0, selD: null, draft: null, locked: null };
+var TR_CATS = [
+  { k: 'fixed', l: 'Fixed' }, { k: 'variable', l: 'Variable' }, { k: 'ring', l: '💍 Ring' },
+  { k: 'vacation', l: '✈ Trip / Vacation' }, { k: 'seasonal', l: 'Seasonal / Annual' }
+];
 
 function trRecordSnapshot() {
   if (!S || !S.settings || typeof S.balance !== 'number' || isNaN(S.balance)) return;
@@ -3350,11 +3356,12 @@ function trFmt(n) { return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLo
 function trFmtSigned(n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US'); }
 function trDay(s) { return new Date(s + 'T00:00:00').getTime(); }
 function trAddMonths(t, m) { var d = new Date(t); d.setMonth(d.getMonth() + m); return d.getTime(); }
+function trDraftAmt() { var d = TR.draft; return d ? Math.max(0, parseFloat(d.amount) || 0) : 0; }
+function trDraftIdx() { return TR.draft ? S.periods.findIndex(function (p) { return p.id === TR.draft.pid; }) : -1; }
 
 function trPoints() {
   var today = fmtDate(new Date());
-  var actual = [], proj = [];
-  // Actual: settled period ends, then daily snapshots (snapshots win on the same day)
+  var actual = [], base = [], proj = [];
   var byDay = {};
   S.periods.forEach(function (p) {
     if (typeof p.closedBal === 'number') byDay[p.endDate] = { d: p.endDate, b: p.closedBal, pid: p.id, kind: 'settled' };
@@ -3362,37 +3369,51 @@ function trPoints() {
   (S.settings.balHist || []).forEach(function (s) { byDay[s.d] = { d: s.d, b: s.b, kind: 'snap' }; });
   byDay[today] = { d: today, b: Math.round(S.balance), kind: 'now' };
   Object.keys(byDay).sort().forEach(function (k) { if (k <= today) actual.push(byDay[k]); });
-  // Projected: today → each future period end
+
+  var opps = {};
+  try { computeOpportunities().forEach(function (o) { opps[o.p.id] = o.amount; }); } catch (e) {}
+  var di = trDraftIdx(), da = trDraftAmt();
+  base.push({ d: today, b: Math.round(S.balance), kind: 'now' });
   proj.push({ d: today, b: Math.round(S.balance), kind: 'now' });
   var bals = getRunningBals();
   S.periods.forEach(function (p, i) {
     var bb = bals[i]; if (!bb) return;
     if (p.endDate < today) return;
-    proj.push({ d: p.endDate, b: Math.round(bb.end), pid: p.id, kind: 'proj', start: p.startDate });
+    var e = Math.round(bb.end);
+    var pt = { d: p.endDate, b: e, pid: p.id, idx: i, kind: 'proj', start: p.startDate, opp: opps[p.id] || 0 };
+    base.push(pt);
+    var adj = Object.assign({}, pt, { base: e, b: (di >= 0 && i >= di) ? e - da : e });
+    proj.push(adj);
   });
-  actual.forEach(function (x) { x.t = trDay(x.d); });
-  proj.forEach(function (x) { x.t = trDay(x.d); });
-  return { actual: actual, proj: proj, today: trDay(today) };
+  [actual, base, proj].forEach(function (a) { a.forEach(function (x) { x.t = trDay(x.d); }); });
+  return { actual: actual, base: base, proj: proj, today: trDay(today), hasDraft: di >= 0 && da > 0 };
 }
 
-function trSetRange(m) { TR.range = m; TR.page = 0; TR.sel = null; renderTrends(); }
-function trPage(dir) { TR.page += dir; TR.sel = null; renderTrends(); }
+function trSetRange(m) { TR.range = m; TR.page = 0; TR.selD = null; trRenderMain(); }
+function trPage(dir) { TR.page += dir; TR.selD = null; trRenderMain(); }
 
 function renderTrends() {
   var el = document.getElementById('tab-trends');
+  if (!el) return;
+  if (TR.draft && !S.periods.some(function (p) { return p.id === TR.draft.pid; })) TR.draft = null;
+  el.innerHTML = '<div id="tr-main"></div><div id="tr-draft"></div>';
+  trRenderMain();
+  trRenderDraft();
+}
+
+function trRenderMain() {
+  var el = document.getElementById('tr-main');
   if (!el) return;
   var P = trPoints();
   var all = P.actual.concat(P.proj);
   var earliest = Math.min.apply(null, all.map(function (x) { return x.t; }));
   var latest = Math.max.apply(null, all.map(function (x) { return x.t; }));
 
-  // Window: page 0 = [today, today + range]; negative pages walk back into history
   var t0 = trAddMonths(P.today, TR.range * TR.page);
   var t1 = trAddMonths(t0, TR.range);
   var canBack = t0 > earliest;
   var canFwd = t1 < latest;
 
-  // Points in window (+ one neighbour each side so lines run to the edges)
   function clip(arr) {
     var out = [], before = null, after = null;
     arr.forEach(function (x) {
@@ -3404,9 +3425,8 @@ function renderTrends() {
     if (after) out.push(after);
     return out;
   }
-  var act = clip(P.actual), proj = clip(P.proj);
+  var act = clip(P.actual), proj = clip(P.proj), base = clip(P.base);
   var inWin = all.filter(function (x) { return x.t >= t0 && x.t <= t1; });
-  // de-dupe the shared "now" point for stats
   var seen = {}; var stat = [];
   inWin.sort(function (a, b) { return a.t - b.t; }).forEach(function (x) { if (!seen[x.d]) { seen[x.d] = 1; stat.push(x); } });
 
@@ -3414,7 +3434,6 @@ function renderTrends() {
   var fmtM = function (t) { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
 
   var h = '<div style="font-family:var(--mono);">';
-  // Controls row
   h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
     '<div style="display:flex;gap:4px;">' +
     [3, 6, 12].map(function (m) {
@@ -3425,7 +3444,7 @@ function renderTrends() {
     '<button class="btn" onclick="trPage(-1)" ' + (canBack ? '' : 'disabled style="opacity:.35;cursor:default;"') + '>◀</button>' +
     '<span style="font-size:12px;color:var(--text-mid);min-width:150px;text-align:center;">' + fmtM(t0).replace(/, \d{4}$/, '') + ' – ' + fmtM(t1) + '</span>' +
     '<button class="btn" onclick="trPage(1)" ' + (canFwd ? '' : 'disabled style="opacity:.35;cursor:default;"') + '>▶</button>' +
-    (TR.page !== 0 ? '<button class="btn" onclick="TR.page=0;TR.sel=null;renderTrends()">Today</button>' : '') +
+    (TR.page !== 0 ? '<button class="btn" onclick="TR.page=0;TR.selD=null;trRenderMain()">Today</button>' : '') +
     '</div></div>';
 
   if (stat.length < 2) {
@@ -3434,19 +3453,18 @@ function renderTrends() {
     el.innerHTML = h; return;
   }
 
-  // Stats
   var first = stat[0], last = stat[stat.length - 1];
   var lo = stat.reduce(function (a, b) { return b.b < a.b ? b : a; });
   var hi = stat.reduce(function (a, b) { return b.b > a.b ? b : a; });
-  // Least-squares trend ($/month)
   var n = stat.length, mx = 0, my = 0;
   stat.forEach(function (x) { mx += x.t; my += x.b; }); mx /= n; my /= n;
   var num = 0, den = 0;
   stat.forEach(function (x) { num += (x.t - mx) * (x.b - my); den += (x.t - mx) * (x.t - mx); });
-  var slope = den ? num / den : 0; // $ per ms
+  var slope = den ? num / den : 0;
   var perMonth = slope * 86400000 * 30.44;
   var icept = my - slope * mx;
   var under = stat.filter(function (x) { return x.b < 500; }).length;
+  var oppCount = stat.filter(function (x) { return x.opp; }).length;
 
   function tile(label, val, sub, col) {
     return '<div style="flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;">' +
@@ -3456,21 +3474,20 @@ function renderTrends() {
   }
   var chg = last.b - first.b;
   var trendWord = Math.abs(perMonth) < 25 ? 'flat' : perMonth > 0 ? 'climbing' : 'sliding';
+  var wi = P.hasDraft ? ' <span style="color:#c084fc;">· with draft</span>' : '';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
-    tile('Change', trFmtSigned(chg), trFmt(first.b) + ' → ' + trFmt(last.b), chg >= 0 ? 'var(--green)' : 'var(--red)') +
-    tile('Trend', trFmtSigned(perMonth) + '/mo', trendWord, Math.abs(perMonth) < 25 ? 'var(--text)' : perMonth > 0 ? 'var(--green)' : 'var(--red)') +
-    tile('Low', trFmt(lo.b), fmtDs(lo.d), lo.b < 0 ? 'var(--red)' : lo.b < 500 ? 'var(--amber)' : 'var(--text)') +
-    tile('High', trFmt(hi.b), fmtDs(hi.d)) +
+    tile('Change' + wi, trFmtSigned(chg), trFmt(first.b) + ' → ' + trFmt(last.b), chg >= 0 ? 'var(--green)' : 'var(--red)') +
+    tile('Trend' + wi, trFmtSigned(perMonth) + '/mo', trendWord, Math.abs(perMonth) < 25 ? 'var(--text)' : perMonth > 0 ? 'var(--green)' : 'var(--red)') +
+    tile('Low' + wi, trFmt(lo.b), fmtDs(lo.d), lo.b < 0 ? 'var(--red)' : lo.b < 500 ? 'var(--amber)' : 'var(--text)') +
+    tile('High' + wi, trFmt(hi.b), fmtDs(hi.d)) +
     '</div>';
 
-  // Chart geometry
   var W = Math.max(300, (el.clientWidth || (document.querySelector('.main-wrap') || {}).clientWidth || 600));
   var H = W < 500 ? 220 : 280;
-  var padL = 54, padR = 12, padT = 12, padB = 26;
-  var vals = stat.map(function (x) { return x.b; }).concat(act.map(function (x) { return x.b; }), proj.map(function (x) { return x.b; }));
+  var padL = 54, padR = 12, padT = 14, padB = 26;
+  var vals = stat.map(function (x) { return x.b; }).concat(act.map(function (x) { return x.b; }), proj.map(function (x) { return x.b; }), base.map(function (x) { return x.b; }));
   var vMin = Math.min.apply(null, vals.concat([0])), vMax = Math.max.apply(null, vals);
   if (vMax - vMin < 500) vMax = vMin + 500;
-  // nice ticks
   var rawStep = (vMax - vMin) / 4;
   var mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
   var step = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; }).find(function (s) { return s >= rawStep; });
@@ -3481,17 +3498,14 @@ function renderTrends() {
 
   var s = '<svg width="' + W + '" height="' + H + '" style="display:block;overflow:visible;touch-action:pan-y;" font-family="IBM Plex Mono, monospace">' +
     '<defs><clipPath id="tr-clip"><rect x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '"/></clipPath></defs>';
-  // grid + y labels
   for (var v = vMin; v <= vMax + 0.01; v += step) {
     var yy = Y(v).toFixed(1);
     s += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + (v === 0 ? '#555a55' : '#232623') + '" stroke-width="1"/>' +
       '<text x="' + (padL - 8) + '" y="' + yy + '" dy="4" text-anchor="end" font-size="11" fill="#7f8c7f">' + kfmt(v) + '</text>';
   }
-  // $500 / $1k reference lines
   [[500, '#fbbf24'], [1000, '#d97706']].forEach(function (r) {
     if (r[0] > vMin && r[0] < vMax) s += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(r[0]).toFixed(1) + '" y2="' + Y(r[0]).toFixed(1) + '" stroke="' + r[1] + '" stroke-opacity=".45" stroke-dasharray="2 4" stroke-width="1"/>';
   });
-  // x labels: month starts
   var md = new Date(t0); md.setDate(1); md.setHours(0, 0, 0, 0); if (md.getTime() < t0) md.setMonth(md.getMonth() + 1);
   var every = TR.range === 12 ? 2 : 1;
   var mi = 0;
@@ -3504,49 +3518,66 @@ function renderTrends() {
     }
     md.setMonth(md.getMonth() + 1); mi++;
   }
-  // today marker
   if (P.today >= t0 && P.today <= t1) {
-    var tx = X(P.today).toFixed(1);
+    var tx = X(P.today).toFixed(1), nearR = X(P.today) > W - padR - 50;
     s += '<line x1="' + tx + '" x2="' + tx + '" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#bcc4bc" stroke-opacity=".35" stroke-dasharray="3 3"/>' +
-      '<text x="' + tx + '" y="' + (padT + 2) + '" dx="' + (X(P.today) > W - padR - 50 ? -4 : 4) + '" text-anchor="' + (X(P.today) > W - padR - 50 ? 'end' : 'start') + '" font-size="10" fill="#bcc4bc" fill-opacity=".7">today</text>';
+      '<text x="' + tx + '" y="' + (padT) + '" dx="' + (nearR ? -4 : 4) + '" text-anchor="' + (nearR ? 'end' : 'start') + '" font-size="10" fill="#bcc4bc" fill-opacity=".7">today</text>';
+  }
+  // draft period band
+  var dIdx = trDraftIdx();
+  if (dIdx >= 0) {
+    var dp = S.periods[dIdx];
+    var bx0 = Math.max(padL, X(trDay(dp.startDate))), bx1 = Math.min(W - padR, X(trDay(dp.endDate)));
+    if (bx1 > bx0) s += '<rect x="' + bx0.toFixed(1) + '" y="' + padT + '" width="' + (bx1 - bx0).toFixed(1) + '" height="' + (H - padT - padB) + '" fill="#c084fc" fill-opacity=".10"/>';
   }
   s += '<g clip-path="url(#tr-clip)">';
-  // trend line
   s += '<line x1="' + X(t0) + '" y1="' + Y(icept + slope * t0).toFixed(1) + '" x2="' + X(t1) + '" y2="' + Y(icept + slope * t1).toFixed(1) + '" stroke="#60a5fa" stroke-opacity=".6" stroke-width="1.5" stroke-dasharray="6 4"/>';
   function path(arr) { return arr.map(function (x, i) { return (i ? 'L' : 'M') + X(x.t).toFixed(1) + ' ' + Y(x.b).toFixed(1); }).join(''); }
-  if (proj.length > 1) s += '<path d="' + path(proj) + '" fill="none" stroke="#4ade80" stroke-opacity=".8" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>';
+  if (P.hasDraft) {
+    if (base.length > 1) s += '<path d="' + path(base) + '" fill="none" stroke="#4ade80" stroke-opacity=".35" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>';
+    if (proj.length > 1) s += '<path d="' + path(proj) + '" fill="none" stroke="#c084fc" stroke-width="2.5" stroke-dasharray="5 3" stroke-linejoin="round"/>';
+  } else if (proj.length > 1) s += '<path d="' + path(proj) + '" fill="none" stroke="#4ade80" stroke-opacity=".8" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>';
   if (act.length > 1) s += '<path d="' + path(act) + '" fill="none" stroke="#4ade80" stroke-width="2" stroke-linejoin="round"/>';
-  // markers below thresholds
   stat.forEach(function (x) {
     if (x.b < 500) s += '<circle cx="' + X(x.t).toFixed(1) + '" cy="' + Y(x.b).toFixed(1) + '" r="4" fill="' + (x.b < 0 ? '#f87171' : '#fbbf24') + '" stroke="#0e0f0e" stroke-width="2"/>';
   });
+  // 💡 opportunity markers (based on the plan without the draft)
+  stat.forEach(function (x) {
+    if (!x.opp || P.hasDraft) return;
+    s += '<text x="' + X(x.t).toFixed(1) + '" y="' + (Y(x.b) - 9).toFixed(1) + '" text-anchor="middle" font-size="12">💡</text>';
+  });
+  if (dIdx >= 0) {
+    var dpt = proj.find(function (x) { return x.idx === dIdx; });
+    if (dpt) s += '<circle cx="' + X(dpt.t).toFixed(1) + '" cy="' + Y(dpt.b).toFixed(1) + '" r="6" fill="#c084fc" stroke="#0e0f0e" stroke-width="2"/>';
+  }
   s += '</g>';
-  // hover layer
   s += '<line id="tr-cross" x1="0" x2="0" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#f5f7f5" stroke-opacity=".5" style="display:none"/>' +
     '<circle id="tr-dot" r="5" fill="#4ade80" stroke="#0e0f0e" stroke-width="2" style="display:none"/>' +
-    '<rect id="tr-hit" x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '" fill="transparent" style="cursor:crosshair"/>';
+    '<rect id="tr-hit" x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '" fill="transparent" style="cursor:pointer"/>';
   s += '</svg>';
 
   h += '<div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 6px 4px;">' + s +
     '<div id="tr-tip" style="position:absolute;display:none;pointer-events:none;background:#0e0f0e;border:1px solid var(--border2);border-radius:6px;padding:6px 9px;font-size:12px;white-space:nowrap;z-index:5;"></div></div>';
 
-  // key
+  var sw = function (col, dash, w, op) { return '<svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="' + col + '" stroke-width="' + (w || 2) + '"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + (op ? ' stroke-opacity="' + op + '"' : '') + '/></svg> '; };
   h += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text-dim);">' +
-    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#4ade80" stroke-width="2"/></svg> actual</span>' +
-    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#4ade80" stroke-width="2" stroke-dasharray="5 4"/></svg> projected (period ends)</span>' +
-    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="6 4"/></svg> trend</span>' +
+    '<span>' + sw('#4ade80') + 'actual</span>' +
+    '<span>' + sw('#4ade80', '5 4', 2, P.hasDraft ? .35 : 0) + 'projected' + (P.hasDraft ? ' (current plan)' : ' (period ends)') + '</span>' +
+    (P.hasDraft ? '<span style="color:#c084fc;">' + sw('#c084fc', '5 3', 2.5) + 'with draft bill</span>' : '') +
+    '<span>' + sw('#60a5fa', '6 4', 1.5) + 'trend</span>' +
+    (!P.hasDraft && oppCount ? '<span>💡 room to spend / pay extra</span>' : '') +
     (under ? '<span style="color:var(--amber);">● ' + under + ' point' + (under > 1 ? 's' : '') + ' under $500</span>' : '') +
     '</div>';
 
-  h += '<div id="tr-detail" style="margin-top:10px;min-height:40px;font-size:13px;color:var(--text-dim);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">Hover or drag across the chart to read balances · tap a projected point to jump to that period</div>';
+  h += '<div id="tr-detail" style="margin-top:10px;min-height:40px;font-size:13px;color:var(--text-dim);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">' +
+    'Hover or drag across the chart to read balances · tap a future point to add a bill there</div>';
 
-  if (!(S.settings.balHist || []).length || P.actual.length < 3) {
+  if (P.actual.length < 3) {
     h += '<div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Actual history starts today — Heath now saves your balance once a day and when you close a period, so the solid line grows as you go.</div>';
   }
   h += '</div>';
   el.innerHTML = h;
 
-  // interaction
   var hit = document.getElementById('tr-hit'), cross = document.getElementById('tr-cross'),
     dot = document.getElementById('tr-dot'), tip = document.getElementById('tr-tip'), det = document.getElementById('tr-detail');
   var svg = hit.ownerSVGElement;
@@ -3558,36 +3589,162 @@ function renderTrends() {
     cand.forEach(function (x) { var d = Math.abs(X(x.t) - px); if (d < bd) { bd = d; best = x; } });
     return best;
   }
-  function show(x) {
+  function kindOf(x) { return x.kind === 'proj' ? 'projected' : x.kind === 'now' ? 'now' : x.kind === 'settled' ? 'period closed' : 'actual'; }
+  function moveTo(x) {
     if (!x) return;
     var cx = X(x.t), cy = Y(x.b);
     cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.display = '';
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.style.display = '';
     dot.setAttribute('fill', x.b < 0 ? '#f87171' : x.b < 500 ? '#fbbf24' : '#4ade80');
-    var kind = x.kind === 'proj' ? 'projected' : x.kind === 'now' ? 'now' : x.kind === 'settled' ? 'period closed' : 'actual';
-    tip.innerHTML = '<div style="color:var(--text-dim);font-size:11px;">' + fmtDs(x.d) + ' · ' + kind + '</div><div style="font-weight:700;font-size:14px;color:' + (x.b < 0 ? 'var(--red)' : 'var(--text)') + ';">' + trFmt(x.b) + '</div>';
+    tip.innerHTML = '<div style="color:var(--text-dim);font-size:11px;">' + fmtDs(x.d) + ' · ' + kindOf(x) + '</div>' +
+      '<div style="font-weight:700;font-size:14px;color:' + (x.b < 0 ? 'var(--red)' : 'var(--text)') + ';">' + trFmt(x.b) + '</div>' +
+      (P.hasDraft && x.base !== undefined && x.base !== x.b ? '<div style="font-size:11px;color:var(--text-dim);">was ' + trFmt(x.base) + '</div>' : '') +
+      (x.opp && !P.hasDraft ? '<div style="font-size:11px;color:var(--green);">💡 room: ' + trFmt(x.opp) + '</div>' : '');
     tip.style.display = '';
     var tw = tip.offsetWidth;
     var left = cx + 6 + 12; if (left + tw > W) left = cx + 6 - tw - 12;
     tip.style.left = left + 'px'; tip.style.top = Math.max(4, cy + 10 - 22) + 'px';
+  }
+  function detail(x) {
+    if (!x) return;
     var delta = x.b - first.b;
-    det.innerHTML = '<span style="color:var(--text);font-weight:600;">' + (x.start ? fmtDs(x.start) + ' – ' : '') + fmtDs(x.d) + '</span> · ' + kind +
+    var isFut = x.kind === 'proj' && x.pid;
+    det.innerHTML = '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+      '<span><span style="color:var(--text);font-weight:600;">' + (x.start ? fmtDs(x.start) + ' – ' : '') + fmtDs(x.d) + '</span> · ' + kindOf(x) +
       ' · <b style="color:' + (x.b < 0 ? 'var(--red)' : x.b < 500 ? 'var(--amber)' : 'var(--green)') + ';">' + trFmt(x.b) + '</b>' +
       ' <span style="color:var(--text-dim);">(' + trFmtSigned(delta) + ' vs window start)</span>' +
-      (x.pid && x.kind === 'proj' ? ' <button class="btn" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="jumpToPeriod(event,\'' + x.pid + '\')">Open period →</button>' : '');
+      (x.opp && !P.hasDraft ? ' <span style="color:var(--green);">💡 ' + trFmt(x.opp) + ' of room</span>' : '') + '</span>' +
+      (isFut ? '<span style="display:flex;gap:6px;margin-left:auto;">' +
+        '<button class="btn" style="padding:3px 9px;font-size:12px;border-color:#c084fc;color:#c084fc;" onclick="trStartDraft(\'' + x.pid + '\')">＋ ' + (TR.draft ? 'Move draft here' : 'Add a bill here') + '</button>' +
+        '<button class="btn" style="padding:3px 9px;font-size:12px;" onclick="jumpToPeriod(event,\'' + x.pid + '\')">Open period →</button></span>' : '') +
+      '</div>';
   }
-  function hide() { cross.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none'; }
-  hit.addEventListener('pointermove', function (e) { show(nearest(e)); });
-  hit.addEventListener('pointerdown', function (e) { show(nearest(e)); });
-  hit.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hide(); });
+  hit.addEventListener('pointermove', function (e) { moveTo(nearest(e)); });
+  hit.addEventListener('pointerdown', function (e) { var x = nearest(e); TR.selD = x ? x.d : null; moveTo(x); detail(x); });
+  hit.addEventListener('mousemove', function (e) { if (e.buttons === 0) { var x = nearest(e); if (!TR.selD) detail(x); } });
+  hit.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') { cross.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none'; } });
+  // keep the selected point after redraws (e.g. typing in the draft)
+  if (TR.selD) { var keep = stat.find(function (x) { return x.d === TR.selD; }); if (keep) { moveTo(keep); detail(keep); } }
+}
+
+// ── What-if draft bill ──
+function trStartDraft(pid) {
+  var prev = TR.draft;
+  TR.locked = null;
+  TR.draft = { pid: pid, name: prev ? prev.name : '', amount: prev ? prev.amount : '', date: '', cat: prev ? prev.cat : 'fixed' };
+  trRenderMain(); trRenderDraft();
+  setTimeout(function () {
+    var f = document.getElementById(TR.draft.name ? 'trd-amt' : 'trd-name'); if (f) f.focus();
+    var panel = document.getElementById('tr-draft'); if (panel && panel.scrollIntoView) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 30);
+}
+function trDraftInput(field, val) {
+  if (!TR.draft) return;
+  TR.armLock = false;
+  TR.draft[field] = val;
+  if (field === 'amount' || field === 'date') trRenderMain();
+  trRenderImpact();
+}
+function trDiscardDraft() { TR.draft = null; trRenderMain(); trRenderDraft(); }
+
+function trImpact() {
+  var d = TR.draft; if (!d) return null;
+  var di = trDraftIdx(); if (di < 0) return null;
+  var amt = trDraftAmt();
+  var bals = getRunningBals();
+  var minBefore = Infinity, minAt = -1;
+  for (var j = di; j < S.periods.length; j++) { if (bals[j] && bals[j].end < minBefore) { minBefore = bals[j].end; minAt = j; } }
+  var p = S.periods[di];
+  return {
+    p: p, amt: amt,
+    endBefore: bals[di] ? bals[di].end : 0, endAfter: (bals[di] ? bals[di].end : 0) - amt,
+    lowBefore: minBefore, lowAfter: minBefore - amt, lowP: S.periods[minAt],
+    room: Math.max(0, Math.floor((minBefore - OPP_FLOOR) / 10) * 10)
+  };
+}
+
+function trRenderDraft() {
+  var el = document.getElementById('tr-draft'); if (!el) return;
+  if (TR.locked) {
+    el.innerHTML = '<div style="margin-top:12px;padding:10px 14px;border:1px solid var(--green-dim);border-left:3px solid var(--green);border-radius:8px;background:var(--surface);font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+      '<span>🔒 <b style="color:var(--green);">Locked in:</b> ' + esc(TR.locked.name) + ' · ' + trFmt(TR.locked.amount) + ' → ' + fmtDs(TR.locked.start) + ' – ' + fmtDs(TR.locked.end) + '</span>' +
+      '<button class="btn" style="margin-left:auto;padding:3px 9px;font-size:12px;" onclick="jumpToPeriod(event,\'' + TR.locked.pid + '\')">See it in the period →</button>' +
+      '<button class="btn" style="padding:3px 9px;font-size:12px;" onclick="TR.locked=null;trRenderDraft()">×</button></div>';
+    return;
+  }
+  var d = TR.draft;
+  if (!d) { el.innerHTML = ''; return; }
+  var p = S.periods.find(function (pp) { return pp.id === d.pid; });
+  var lbl = 'font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px;';
+  el.innerHTML = '<div style="margin-top:12px;padding:12px 14px;border:1px solid #6b3fa0;border-left:3px solid #c084fc;border-radius:8px;background:var(--surface);">' +
+    '<div style="display:flex;align-items:center;gap:4px 8px;margin-bottom:10px;flex-wrap:wrap;">' +
+    '<span style="font-weight:700;color:#c084fc;white-space:nowrap;">✏️ Draft bill</span>' +
+    '<span style="font-size:12px;color:var(--text-mid);">' + fmtDs(p.startDate) + ' – ' + fmtDs(p.endDate) + '</span>' +
+    '<span style="font-size:11px;color:var(--text-dim);margin-left:auto;">nothing is saved until you lock it in</span></div>' +
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+    '<label style="flex:2;min-width:160px;"><span style="' + lbl + '">Name</span><input class="m-input" id="trd-name" value="' + esc(d.name) + '" placeholder="e.g. New tires" oninput="trDraftInput(\'name\',this.value)" style="width:100%;"></label>' +
+    '<label style="flex:1;min-width:110px;"><span style="' + lbl + '">Amount</span><input class="m-input" id="trd-amt" type="number" inputmode="decimal" min="0" step="1" value="' + esc(String(d.amount)) + '" placeholder="0" oninput="trDraftInput(\'amount\',this.value)" style="width:100%;"></label>' +
+    '<label style="flex:1;min-width:140px;"><span style="' + lbl + '">Due date (optional)</span><input class="m-input" id="trd-date" type="date" min="' + p.startDate + '" max="' + p.endDate + '" value="' + esc(d.date) + '" oninput="trDraftInput(\'date\',this.value)" style="width:100%;"></label>' +
+    '<label style="flex:1;min-width:150px;"><span style="' + lbl + '">Section</span><select class="m-input" id="trd-cat" onchange="trDraftInput(\'cat\',this.value)" style="width:100%;">' +
+    TR_CATS.map(function (c) { return '<option value="' + c.k + '"' + (d.cat === c.k ? ' selected' : '') + '>' + c.l + '</option>'; }).join('') + '</select></label>' +
+    '</div>' +
+    '<div id="tr-impact" style="margin-top:10px;"></div>' +
+    '</div>';
+  trRenderImpact();
+}
+
+function trRenderImpact() {
+  var el = document.getElementById('tr-impact'); if (!el) return;
+  var im = trImpact(); if (!im) { el.innerHTML = ''; return; }
+  var d = TR.draft;
+  var col = function (v) { return v < 0 ? 'var(--red)' : v < 500 ? 'var(--amber)' : v < 1000 ? '#d97706' : 'var(--green)'; };
+  var verdict;
+  if (!im.amt) verdict = '<span style="color:var(--text-dim);">Enter an amount to see how it moves the graph.</span>';
+  else if (im.lowAfter < 0) verdict = '<span style="color:var(--red);">⚠ This pushes you negative — lowest point ' + trFmt(im.lowAfter) + ' (' + fmtDs(im.lowP.startDate) + ' – ' + fmtDs(im.lowP.endDate) + ').</span>';
+  else if (im.lowAfter < 500) verdict = '<span style="color:var(--amber);">⚠ Tight — lowest point drops to ' + trFmt(im.lowAfter) + ' (' + fmtDs(im.lowP.startDate) + ').</span>';
+  else if (im.amt <= im.room) verdict = '<span style="color:var(--green);">✓ Fits — every period after stays above $' + OPP_FLOOR + '.</span>';
+  else verdict = '<span style="color:#d97706;">Doable, but cuts below your $' + OPP_FLOOR + ' cushion — lowest point ' + trFmt(im.lowAfter) + '.</span>';
+  var ready = (d.name || '').trim() && im.amt > 0;
+  el.innerHTML =
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-mid);margin-bottom:8px;">' +
+    '<span>💡 Room here: <b style="color:var(--green);">' + trFmt(im.room) + '</b> <span style="color:var(--text-dim);">(keeps later periods ≥ $' + OPP_FLOOR + ')</span></span>' +
+    '<span>Period end: ' + trFmt(im.endBefore) + ' → <b style="color:' + col(im.endAfter) + ';">' + trFmt(im.endAfter) + '</b></span>' +
+    '<span>Lowest ahead: ' + trFmt(im.lowBefore) + ' → <b style="color:' + col(im.lowAfter) + ';">' + trFmt(im.lowAfter) + '</b></span>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+    '<div style="font-size:13px;flex:1;min-width:200px;">' + verdict + '</div>' +
+    '<button class="btn" onclick="trDiscardDraft()">Discard</button>' +
+    '<button class="btn primary" onclick="trLockDraft()" ' + (ready ? (TR.armLock ? 'style="background:var(--green);color:#0e0f0e;border-color:var(--green);font-weight:700;"' : '') : 'disabled style="opacity:.4;cursor:default;"') + '>' + (TR.armLock ? 'Tap again to lock in ' + trFmt(im.amt) : '🔒 Lock it in') + '</button>' +
+    '</div>' +
+    (ready ? '' : '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Add a name and amount to lock it in.</div>');
+}
+
+function trLockDraft() {
+  var d = TR.draft; if (!d) return;
+  var p = S.periods.find(function (pp) { return pp.id === d.pid; }); if (!p) return;
+  var name = (d.name || '').trim(), amt = Math.round(trDraftAmt() * 100) / 100;
+  if (!name || !(amt > 0)) return;
+  if (!TR.armLock) { // press-again confirm (Chrome suppresses confirm() unpredictably)
+    TR.armLock = true; trRenderImpact();
+    clearTimeout(TR._armT); TR._armT = setTimeout(function () { if (TR.armLock) { TR.armLock = false; trRenderImpact(); } }, 4000);
+    return;
+  }
+  TR.armLock = false;
+  var day = d.date ? new Date(d.date + 'T00:00:00').getDate() : null;
+  var cat = d.cat === 'variable' ? 'variable' : 'fixed';
+  var tag = (d.cat === 'vacation' || d.cat === 'seasonal' || d.cat === 'ring') ? d.cat : '';
+  p.bills.push({ id: uid(), templateId: null, name: name, amount: amt, day: day, status: 'upcoming', category: cat, tag: tag, url: '', autopay: false, recurrence: 'one-off' });
+  p.bills.sort(function (a, b) { return (a.day || 99) - (b.day || 99); });
+  TR.locked = { name: name, amount: amt, pid: p.id, start: p.startDate, end: p.endDate };
+  TR.draft = null;
+  persist(); render();
 }
 
 var _trResizeT = null;
 window.addEventListener('resize', function () {
   if (DC.tab !== 'trends') return;
-  clearTimeout(_trResizeT); _trResizeT = setTimeout(renderTrends, 150);
+  clearTimeout(_trResizeT); _trResizeT = setTimeout(trRenderMain, 150);
 });
-
 
 // ═══ BALANCE MAP ═══
 function renderViz() {
@@ -4296,7 +4453,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-11-06-TRENDS";
+var HEATH_BUILD="2026-11-06-WHATIF";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
