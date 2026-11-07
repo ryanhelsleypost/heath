@@ -78,7 +78,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15
   .hdr-actions{position:absolute;top:8px;right:10px;padding:0;width:auto;}
   .hdr-actions .btn{flex:none;padding:7px 12px;font-size:14px;}
   .main-wrap{padding:12px 8px 80px;}
-  .tab-bar{width:100%;}
+  .tab-bar{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .tab-btn{white-space:nowrap;}
   .tab-btn{flex:1;padding:10px 8px;}
   .period-hdr{padding:11px 10px;}
   .bill-row{padding:9px 6px;gap:6px;}
@@ -253,11 +254,13 @@ body.theme-mint { --bg:#eef7f0; --surface:#ffffff; --surface2:#dfeee3; --border:
     <button class="tab-btn" id="tab-btn-debt" onclick="setTab('debt')">💀 Debt Collector</button>
     <button class="tab-btn" id="tab-btn-piggy" onclick="setTab('piggy')">🐷 Piggy Bank</button>
     <button class="tab-btn" id="tab-btn-xmas" onclick="setTab('xmas')">🎄 Christmas</button>
+    <button class="tab-btn" id="tab-btn-trends" onclick="setTab('trends')">📈 Trends</button>
   </div>
   <div id="tab-periods"></div>
   <div id="tab-debt" style="display:none"></div>
   <div id="tab-piggy" style="display:none"></div>
   <div id="tab-xmas" style="display:none"></div>
+  <div id="tab-trends" style="display:none"></div>
 </div>
 <div id="modal-root"></div>
 <div id="wizard-root"></div>
@@ -1289,6 +1292,7 @@ function buildIncomeEntriesForPeriod(p) {
 var _undoStack=[], _undoMax=10;
 function _snap(){return JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies,xmas:S.xmas||null});}
 function persist() {
+  trRecordSnapshot();
   var s=_snap();
   if(!_undoStack.length||_undoStack[_undoStack.length-1]!==s){_undoStack.push(s);if(_undoStack.length>_undoMax)_undoStack.shift();}
   localStorage.setItem(STORAGE_KEY,JSON.stringify({balance:S.balance,templates:S.templates,periods:S.periods,subtitle:S.subtitle||'',settings:S.settings,incomes:S.incomes,piggies:S.piggies,xmas:S.xmas||null}));
@@ -1500,12 +1504,15 @@ function setTab(tab) {
   document.getElementById('tab-piggy').style.display=tab==='piggy'?'':'none';
   document.getElementById('tab-btn-xmas').className='tab-btn'+(tab==='xmas'?' active':'');
   document.getElementById('tab-xmas').style.display=tab==='xmas'?'':'none';
+  document.getElementById('tab-btn-trends').className='tab-btn'+(tab==='trends'?' active':'');
+  document.getElementById('tab-trends').style.display=tab==='trends'?'':'none';
+  if(tab==='trends'){ TR.page=0; renderTrends(); }
   if(tab==='xmas') renderXmas();
   if(tab==='debt') renderDebt();
   if(tab==='piggy') renderPiggy();
 }
 
-function render() { renderHeader(); renderTimeline(); renderPeriods(); renderDigest(); if(S.ui_manage) renderModal(); }
+function render() { renderHeader(); renderTimeline(); renderPeriods(); renderDigest(); if(S.ui_manage) renderModal(); if(DC.tab==='trends') renderTrends(); }
 function renderDigest(){
   var el=document.getElementById('digest-banner'); if(!el) return;
   if(S.ui_digestDismissed){ el.innerHTML=''; return; }
@@ -2595,6 +2602,7 @@ function advancePeriod(){
   const p=S.periods[ai];
   // Settle: add only non-cleared income (cleared was already manually folded in), subtract non-cleared bills
   S.balance=Math.round(S.balance+periodIncomeTotal(p)-periodBillsTotal(p));
+  p.closedBal=S.balance; p.closedAt=Date.now(); // for 📈 Trends history
   p.active=false;p.open=false;
   p.bills.forEach(b=>{if(b.status!=='cleared')b.status='cleared';});
   S.periods[ai+1].active=true;S.periods[ai+1].open=true;
@@ -3319,6 +3327,268 @@ function exportData(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ledger_'+new Date().toISOString().split('T')[0]+'.json';a.click();URL.revokeObjectURL(a.href);
 }
 
+// ═══ TRENDS (balance graph) ═══ (build 2026-11-06-TRENDS)
+// Line chart of balance over time. Solid = actual (daily snapshots of S.balance
+// recorded in persist() + settled period-end balances recorded on advance).
+// Dashed = projected period-end balances from getRunningBals().
+// Range: 3M / 6M / 1Y; ◀ ▶ page the window by one range-length.
+var TR = { range: 6, page: 0, sel: null };
+
+function trRecordSnapshot() {
+  if (!S || !S.settings || typeof S.balance !== 'number' || isNaN(S.balance)) return;
+  if (!S.settings.setupComplete && !S.periods.length) return;
+  var h = S.settings.balHist || (S.settings.balHist = []);
+  var d = fmtDate(new Date());
+  var b = Math.round(S.balance);
+  var last = h[h.length - 1];
+  if (last && last.d === d) { last.b = b; }
+  else h.push({ d: d, b: b });
+  if (h.length > 1200) S.settings.balHist = h.slice(-1200);
+}
+
+function trFmt(n) { return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US'); }
+function trFmtSigned(n) { return (n > 0 ? '+' : n < 0 ? '−' : '±') + '$' + Math.abs(Math.round(n)).toLocaleString('en-US'); }
+function trDay(s) { return new Date(s + 'T00:00:00').getTime(); }
+function trAddMonths(t, m) { var d = new Date(t); d.setMonth(d.getMonth() + m); return d.getTime(); }
+
+function trPoints() {
+  var today = fmtDate(new Date());
+  var actual = [], proj = [];
+  // Actual: settled period ends, then daily snapshots (snapshots win on the same day)
+  var byDay = {};
+  S.periods.forEach(function (p) {
+    if (typeof p.closedBal === 'number') byDay[p.endDate] = { d: p.endDate, b: p.closedBal, pid: p.id, kind: 'settled' };
+  });
+  (S.settings.balHist || []).forEach(function (s) { byDay[s.d] = { d: s.d, b: s.b, kind: 'snap' }; });
+  byDay[today] = { d: today, b: Math.round(S.balance), kind: 'now' };
+  Object.keys(byDay).sort().forEach(function (k) { if (k <= today) actual.push(byDay[k]); });
+  // Projected: today → each future period end
+  proj.push({ d: today, b: Math.round(S.balance), kind: 'now' });
+  var bals = getRunningBals();
+  S.periods.forEach(function (p, i) {
+    var bb = bals[i]; if (!bb) return;
+    if (p.endDate < today) return;
+    proj.push({ d: p.endDate, b: Math.round(bb.end), pid: p.id, kind: 'proj', start: p.startDate });
+  });
+  actual.forEach(function (x) { x.t = trDay(x.d); });
+  proj.forEach(function (x) { x.t = trDay(x.d); });
+  return { actual: actual, proj: proj, today: trDay(today) };
+}
+
+function trSetRange(m) { TR.range = m; TR.page = 0; TR.sel = null; renderTrends(); }
+function trPage(dir) { TR.page += dir; TR.sel = null; renderTrends(); }
+
+function renderTrends() {
+  var el = document.getElementById('tab-trends');
+  if (!el) return;
+  var P = trPoints();
+  var all = P.actual.concat(P.proj);
+  var earliest = Math.min.apply(null, all.map(function (x) { return x.t; }));
+  var latest = Math.max.apply(null, all.map(function (x) { return x.t; }));
+
+  // Window: page 0 = [today, today + range]; negative pages walk back into history
+  var t0 = trAddMonths(P.today, TR.range * TR.page);
+  var t1 = trAddMonths(t0, TR.range);
+  var canBack = t0 > earliest;
+  var canFwd = t1 < latest;
+
+  // Points in window (+ one neighbour each side so lines run to the edges)
+  function clip(arr) {
+    var out = [], before = null, after = null;
+    arr.forEach(function (x) {
+      if (x.t < t0) before = x;
+      else if (x.t > t1) { if (!after) after = x; }
+      else out.push(x);
+    });
+    if (before) out.unshift(before);
+    if (after) out.push(after);
+    return out;
+  }
+  var act = clip(P.actual), proj = clip(P.proj);
+  var inWin = all.filter(function (x) { return x.t >= t0 && x.t <= t1; });
+  // de-dupe the shared "now" point for stats
+  var seen = {}; var stat = [];
+  inWin.sort(function (a, b) { return a.t - b.t; }).forEach(function (x) { if (!seen[x.d]) { seen[x.d] = 1; stat.push(x); } });
+
+  var rangeLbl = { 3: 'Quarter', 6: '6 Months', 12: 'Year' };
+  var fmtM = function (t) { return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+
+  var h = '<div style="font-family:var(--mono);">';
+  // Controls row
+  h += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+    '<div style="display:flex;gap:4px;">' +
+    [3, 6, 12].map(function (m) {
+      var on = TR.range === m;
+      return '<button class="btn" onclick="trSetRange(' + m + ')" style="' + (on ? 'background:var(--green-dim);border-color:var(--green);color:var(--green);' : '') + '">' + rangeLbl[m] + '</button>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">' +
+    '<button class="btn" onclick="trPage(-1)" ' + (canBack ? '' : 'disabled style="opacity:.35;cursor:default;"') + '>◀</button>' +
+    '<span style="font-size:12px;color:var(--text-mid);min-width:150px;text-align:center;">' + fmtM(t0).replace(/, \d{4}$/, '') + ' – ' + fmtM(t1) + '</span>' +
+    '<button class="btn" onclick="trPage(1)" ' + (canFwd ? '' : 'disabled style="opacity:.35;cursor:default;"') + '>▶</button>' +
+    (TR.page !== 0 ? '<button class="btn" onclick="TR.page=0;TR.sel=null;renderTrends()">Today</button>' : '') +
+    '</div></div>';
+
+  if (stat.length < 2) {
+    h += '<div style="padding:30px 14px;text-align:center;color:var(--text-dim);font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">' +
+      (t1 <= P.today ? 'No balance history for this window yet. Heath records your balance each day you use it, so history fills in from here on.' : 'No periods in this window — generate more periods in Setup.') + '</div></div>';
+    el.innerHTML = h; return;
+  }
+
+  // Stats
+  var first = stat[0], last = stat[stat.length - 1];
+  var lo = stat.reduce(function (a, b) { return b.b < a.b ? b : a; });
+  var hi = stat.reduce(function (a, b) { return b.b > a.b ? b : a; });
+  // Least-squares trend ($/month)
+  var n = stat.length, mx = 0, my = 0;
+  stat.forEach(function (x) { mx += x.t; my += x.b; }); mx /= n; my /= n;
+  var num = 0, den = 0;
+  stat.forEach(function (x) { num += (x.t - mx) * (x.b - my); den += (x.t - mx) * (x.t - mx); });
+  var slope = den ? num / den : 0; // $ per ms
+  var perMonth = slope * 86400000 * 30.44;
+  var icept = my - slope * mx;
+  var under = stat.filter(function (x) { return x.b < 500; }).length;
+
+  function tile(label, val, sub, col) {
+    return '<div style="flex:1;min-width:140px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:9px 12px;">' +
+      '<div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">' + label + '</div>' +
+      '<div style="font-size:17px;font-weight:700;color:' + (col || 'var(--text)') + ';">' + val + '</div>' +
+      (sub ? '<div style="font-size:11px;color:var(--text-dim);">' + sub + '</div>' : '') + '</div>';
+  }
+  var chg = last.b - first.b;
+  var trendWord = Math.abs(perMonth) < 25 ? 'flat' : perMonth > 0 ? 'climbing' : 'sliding';
+  h += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">' +
+    tile('Change', trFmtSigned(chg), trFmt(first.b) + ' → ' + trFmt(last.b), chg >= 0 ? 'var(--green)' : 'var(--red)') +
+    tile('Trend', trFmtSigned(perMonth) + '/mo', trendWord, Math.abs(perMonth) < 25 ? 'var(--text)' : perMonth > 0 ? 'var(--green)' : 'var(--red)') +
+    tile('Low', trFmt(lo.b), fmtDs(lo.d), lo.b < 0 ? 'var(--red)' : lo.b < 500 ? 'var(--amber)' : 'var(--text)') +
+    tile('High', trFmt(hi.b), fmtDs(hi.d)) +
+    '</div>';
+
+  // Chart geometry
+  var W = Math.max(300, (el.clientWidth || (document.querySelector('.main-wrap') || {}).clientWidth || 600));
+  var H = W < 500 ? 220 : 280;
+  var padL = 54, padR = 12, padT = 12, padB = 26;
+  var vals = stat.map(function (x) { return x.b; }).concat(act.map(function (x) { return x.b; }), proj.map(function (x) { return x.b; }));
+  var vMin = Math.min.apply(null, vals.concat([0])), vMax = Math.max.apply(null, vals);
+  if (vMax - vMin < 500) vMax = vMin + 500;
+  // nice ticks
+  var rawStep = (vMax - vMin) / 4;
+  var mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  var step = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; }).find(function (s) { return s >= rawStep; });
+  vMin = Math.floor(vMin / step) * step; vMax = Math.ceil(vMax / step) * step;
+  var X = function (t) { return padL + (t - t0) / (t1 - t0) * (W - padL - padR); };
+  var Y = function (v) { return padT + (vMax - v) / (vMax - vMin) * (H - padT - padB); };
+  var kfmt = function (v) { var a = Math.abs(v); return (v < 0 ? '−' : '') + '$' + (a >= 1000 ? (a / 1000).toFixed(a % 1000 ? 1 : 0).replace(/\.0$/, '') + 'k' : a); };
+
+  var s = '<svg width="' + W + '" height="' + H + '" style="display:block;overflow:visible;touch-action:pan-y;" font-family="IBM Plex Mono, monospace">' +
+    '<defs><clipPath id="tr-clip"><rect x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '"/></clipPath></defs>';
+  // grid + y labels
+  for (var v = vMin; v <= vMax + 0.01; v += step) {
+    var yy = Y(v).toFixed(1);
+    s += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '" stroke="' + (v === 0 ? '#555a55' : '#232623') + '" stroke-width="1"/>' +
+      '<text x="' + (padL - 8) + '" y="' + yy + '" dy="4" text-anchor="end" font-size="11" fill="#7f8c7f">' + kfmt(v) + '</text>';
+  }
+  // $500 / $1k reference lines
+  [[500, '#fbbf24'], [1000, '#d97706']].forEach(function (r) {
+    if (r[0] > vMin && r[0] < vMax) s += '<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(r[0]).toFixed(1) + '" y2="' + Y(r[0]).toFixed(1) + '" stroke="' + r[1] + '" stroke-opacity=".45" stroke-dasharray="2 4" stroke-width="1"/>';
+  });
+  // x labels: month starts
+  var md = new Date(t0); md.setDate(1); md.setHours(0, 0, 0, 0); if (md.getTime() < t0) md.setMonth(md.getMonth() + 1);
+  var every = TR.range === 12 ? 2 : 1;
+  var mi = 0;
+  while (md.getTime() <= t1) {
+    if (mi % every === 0) {
+      var xx = X(md.getTime()).toFixed(1);
+      var lbl = md.toLocaleDateString('en-US', { month: 'short' }) + (md.getMonth() === 0 ? " '" + String(md.getFullYear()).slice(2) : '');
+      s += '<line x1="' + xx + '" x2="' + xx + '" y1="' + (H - padB) + '" y2="' + (H - padB + 4) + '" stroke="#333633"/>' +
+        '<text x="' + xx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#7f8c7f">' + lbl + '</text>';
+    }
+    md.setMonth(md.getMonth() + 1); mi++;
+  }
+  // today marker
+  if (P.today >= t0 && P.today <= t1) {
+    var tx = X(P.today).toFixed(1);
+    s += '<line x1="' + tx + '" x2="' + tx + '" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#bcc4bc" stroke-opacity=".35" stroke-dasharray="3 3"/>' +
+      '<text x="' + tx + '" y="' + (padT + 2) + '" dx="' + (X(P.today) > W - padR - 50 ? -4 : 4) + '" text-anchor="' + (X(P.today) > W - padR - 50 ? 'end' : 'start') + '" font-size="10" fill="#bcc4bc" fill-opacity=".7">today</text>';
+  }
+  s += '<g clip-path="url(#tr-clip)">';
+  // trend line
+  s += '<line x1="' + X(t0) + '" y1="' + Y(icept + slope * t0).toFixed(1) + '" x2="' + X(t1) + '" y2="' + Y(icept + slope * t1).toFixed(1) + '" stroke="#60a5fa" stroke-opacity=".6" stroke-width="1.5" stroke-dasharray="6 4"/>';
+  function path(arr) { return arr.map(function (x, i) { return (i ? 'L' : 'M') + X(x.t).toFixed(1) + ' ' + Y(x.b).toFixed(1); }).join(''); }
+  if (proj.length > 1) s += '<path d="' + path(proj) + '" fill="none" stroke="#4ade80" stroke-opacity=".8" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round"/>';
+  if (act.length > 1) s += '<path d="' + path(act) + '" fill="none" stroke="#4ade80" stroke-width="2" stroke-linejoin="round"/>';
+  // markers below thresholds
+  stat.forEach(function (x) {
+    if (x.b < 500) s += '<circle cx="' + X(x.t).toFixed(1) + '" cy="' + Y(x.b).toFixed(1) + '" r="4" fill="' + (x.b < 0 ? '#f87171' : '#fbbf24') + '" stroke="#0e0f0e" stroke-width="2"/>';
+  });
+  s += '</g>';
+  // hover layer
+  s += '<line id="tr-cross" x1="0" x2="0" y1="' + padT + '" y2="' + (H - padB) + '" stroke="#f5f7f5" stroke-opacity=".5" style="display:none"/>' +
+    '<circle id="tr-dot" r="5" fill="#4ade80" stroke="#0e0f0e" stroke-width="2" style="display:none"/>' +
+    '<rect id="tr-hit" x="' + padL + '" y="0" width="' + (W - padL - padR) + '" height="' + H + '" fill="transparent" style="cursor:crosshair"/>';
+  s += '</svg>';
+
+  h += '<div style="position:relative;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 6px 4px;">' + s +
+    '<div id="tr-tip" style="position:absolute;display:none;pointer-events:none;background:#0e0f0e;border:1px solid var(--border2);border-radius:6px;padding:6px 9px;font-size:12px;white-space:nowrap;z-index:5;"></div></div>';
+
+  // key
+  h += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:11px;color:var(--text-dim);">' +
+    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#4ade80" stroke-width="2"/></svg> actual</span>' +
+    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#4ade80" stroke-width="2" stroke-dasharray="5 4"/></svg> projected (period ends)</span>' +
+    '<span><svg width="22" height="8"><line x1="0" x2="22" y1="4" y2="4" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray="6 4"/></svg> trend</span>' +
+    (under ? '<span style="color:var(--amber);">● ' + under + ' point' + (under > 1 ? 's' : '') + ' under $500</span>' : '') +
+    '</div>';
+
+  h += '<div id="tr-detail" style="margin-top:10px;min-height:40px;font-size:13px;color:var(--text-dim);padding:8px 12px;background:var(--surface);border-radius:6px;border:1px solid var(--border);">Hover or drag across the chart to read balances · tap a projected point to jump to that period</div>';
+
+  if (!(S.settings.balHist || []).length || P.actual.length < 3) {
+    h += '<div style="margin-top:8px;font-size:11px;color:var(--text-dim);">Actual history starts today — Heath now saves your balance once a day and when you close a period, so the solid line grows as you go.</div>';
+  }
+  h += '</div>';
+  el.innerHTML = h;
+
+  // interaction
+  var hit = document.getElementById('tr-hit'), cross = document.getElementById('tr-cross'),
+    dot = document.getElementById('tr-dot'), tip = document.getElementById('tr-tip'), det = document.getElementById('tr-detail');
+  var svg = hit.ownerSVGElement;
+  var cand = stat;
+  function nearest(evt) {
+    var r = svg.getBoundingClientRect();
+    var px = evt.clientX - r.left;
+    var best = null, bd = 1e9;
+    cand.forEach(function (x) { var d = Math.abs(X(x.t) - px); if (d < bd) { bd = d; best = x; } });
+    return best;
+  }
+  function show(x) {
+    if (!x) return;
+    var cx = X(x.t), cy = Y(x.b);
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.display = '';
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.style.display = '';
+    dot.setAttribute('fill', x.b < 0 ? '#f87171' : x.b < 500 ? '#fbbf24' : '#4ade80');
+    var kind = x.kind === 'proj' ? 'projected' : x.kind === 'now' ? 'now' : x.kind === 'settled' ? 'period closed' : 'actual';
+    tip.innerHTML = '<div style="color:var(--text-dim);font-size:11px;">' + fmtDs(x.d) + ' · ' + kind + '</div><div style="font-weight:700;font-size:14px;color:' + (x.b < 0 ? 'var(--red)' : 'var(--text)') + ';">' + trFmt(x.b) + '</div>';
+    tip.style.display = '';
+    var tw = tip.offsetWidth;
+    var left = cx + 6 + 12; if (left + tw > W) left = cx + 6 - tw - 12;
+    tip.style.left = left + 'px'; tip.style.top = Math.max(4, cy + 10 - 22) + 'px';
+    var delta = x.b - first.b;
+    det.innerHTML = '<span style="color:var(--text);font-weight:600;">' + (x.start ? fmtDs(x.start) + ' – ' : '') + fmtDs(x.d) + '</span> · ' + kind +
+      ' · <b style="color:' + (x.b < 0 ? 'var(--red)' : x.b < 500 ? 'var(--amber)' : 'var(--green)') + ';">' + trFmt(x.b) + '</b>' +
+      ' <span style="color:var(--text-dim);">(' + trFmtSigned(delta) + ' vs window start)</span>' +
+      (x.pid && x.kind === 'proj' ? ' <button class="btn" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="jumpToPeriod(event,\'' + x.pid + '\')">Open period →</button>' : '');
+  }
+  function hide() { cross.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none'; }
+  hit.addEventListener('pointermove', function (e) { show(nearest(e)); });
+  hit.addEventListener('pointerdown', function (e) { show(nearest(e)); });
+  hit.addEventListener('pointerleave', function (e) { if (e.pointerType === 'mouse') hide(); });
+}
+
+var _trResizeT = null;
+window.addEventListener('resize', function () {
+  if (DC.tab !== 'trends') return;
+  clearTimeout(_trResizeT); _trResizeT = setTimeout(renderTrends, 150);
+});
+
+
 // ═══ BALANCE MAP ═══
 function renderViz() {
   var el = document.getElementById('tab-viz');
@@ -4026,7 +4296,7 @@ dcPersist=function(){_origDcPersist();syncQueuePush();};
 window.addEventListener('beforeunload',function(){if(SYNC.debounce){clearTimeout(SYNC.debounce);syncPushNow();}});
 
 // ═══ SELF-UPDATE CHECK ═══
-var HEATH_BUILD="2026-10-03-XMASDONE";
+var HEATH_BUILD="2026-11-06-TRENDS";
 function checkForUpdate(manual){
   try{
     fetch(location.pathname+'?u='+Date.now(),{cache:'no-store'}).then(function(r){return r.text();}).then(function(txt){
